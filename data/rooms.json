@@ -1,0 +1,27 @@
+{
+  "rooms": [
+    {
+      "id": "flat-sample",
+      "title": "우리 반 그림 전시회",
+      "teacher": "김선생 (예시)",
+      "period": { "start": "2026-11-10", "end": "2026-12-20" },
+      "description": "한 학기 동안 그린 그림을 모았습니다. 입구에서 왼쪽 벽을 따라 한 바퀴 돌며 감상해 보세요.",
+      "type": "flat",
+      "maxArtworks": 10,
+      "theme": { "wall": "white", "floor": "wood", "brightness": "normal" },
+      "artworkCount": 6
+    },
+    {
+      "id": "solid-sample",
+      "title": "손으로 빚은 것들",
+      "teacher": "이선생 (예시)",
+      "period": { "start": "2026-11-17", "end": "2026-12-24" },
+      "description": "찰흙, 나무, 종이죽으로 만든 입체 작품과 3D 스캔 작품을 전시합니다. 받침대에 가까이 가서 돌려 보세요.",
+      "type": "solid",
+      "maxArtworks": 8,
+      "arrangement": "grid",
+      "theme": { "wall": "navy", "floor": "concrete", "brightness": "normal" },
+      "artworkCount": 6
+    }
+  ]
+}

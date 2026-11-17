@@ -1,0 +1,46 @@
+{
+  "artworks": [
+    {
+      "id": "sample-01", "type": "image", "slot": 1,
+      "title": "우리 동네 뒷산", "artist": "김하늘 (예시)", "grade": "5학년 2반",
+      "material": "도화지에 수채 물감", "size": "39 × 27 cm",
+      "description": "주말마다 가족과 오르는 뒷산을 그렸습니다. 가까운 산은 진하게, 먼 산은 연하게 칠해서 멀고 가까운 느낌을 표현했습니다.",
+      "image": "sample1.svg", "frameColor": "wood"
+    },
+    {
+      "id": "sample-02", "type": "image", "slot": 2,
+      "title": "꽃병", "artist": "이도윤 (예시)", "grade": "4학년 1반",
+      "material": "색종이 콜라주", "size": "27 × 39 cm",
+      "description": "색종이를 오려 붙여 만든 꽃병입니다. 꽃마다 다른 색을 써서 교실 창가의 화분을 떠올리며 만들었습니다.",
+      "image": "sample2.svg", "frameColor": "white"
+    },
+    {
+      "id": "sample-03", "type": "image", "slot": 3,
+      "title": "네 가지 색과 원", "artist": "", "grade": "6학년 3반",
+      "material": "캔버스에 아크릴 물감", "size": "30 × 30 cm",
+      "description": "기본 도형과 원색만으로 화면을 구성했습니다. 작가 이름을 비워 두면 '익명'으로 표시됩니다.",
+      "image": "sample3.svg", "frameColor": "black"
+    },
+    {
+      "id": "sample-04", "type": "image", "slot": 5,
+      "title": "노을 지는 바다", "artist": "박서연 (예시)", "grade": "6학년 1반",
+      "material": "디지털 드로잉", "size": "1920 × 1080 px",
+      "description": "여름 방학에 본 바다의 노을을 태블릿으로 그렸습니다. 하늘 색이 위에서 아래로 천천히 바뀌도록 표현했습니다.",
+      "image": "sample4.svg", "frameColor": "gold"
+    },
+    {
+      "id": "sample-05", "type": "image", "slot": 7,
+      "title": "사과나무", "artist": "최지호 (예시)", "grade": "3학년 4반",
+      "material": "크레파스", "size": "26 × 39 cm",
+      "description": "할머니 댁 마당에 있는 사과나무입니다. 빨간 사과가 다섯 개 열렸습니다.",
+      "image": "sample5.svg", "frameColor": "walnut"
+    },
+    {
+      "id": "sample-06", "type": "image", "slot": 9,
+      "title": "리듬", "artist": "정유나 (예시)", "grade": "5학년 3반",
+      "material": "마커, 색연필", "size": "42 × 28 cm",
+      "description": "음악을 들으며 손이 가는 대로 선을 그었습니다. 액자 색은 색상 코드(#3d7be0)로 직접 지정한 예시입니다.",
+      "image": "sample6.svg", "frameColor": "#3d7be0"
+    }
+  ]
+}

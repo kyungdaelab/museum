@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>가상 미술관</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #e9e6df; }
+  body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+         -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .hidden { display: none !important; }
+  .muted { color: #8a8272; font-size: 13px; }
+  canvas#view { display: block; width: 100vw; height: 100vh; height: 100dvh; touch-action: none; cursor: grab; }
+  canvas#view.dragging { cursor: grabbing; }
+  body:not([data-state=room]) canvas#view { visibility: hidden; }
+
+  /* ── 전시실 안에서만 보이는 요소 ── */
+  body:not([data-state=room]) .hud { display: none !important; }
+  #help { position: fixed; top: 14px; left: 14px; padding: 10px 14px; border-radius: 10px;
+          background: rgba(255,255,255,.82); color: #333; font-size: 13px; line-height: 1.6;
+          box-shadow: 0 2px 10px rgba(0,0,0,.12); pointer-events: none; transition: opacity .8s; }
+  #help b { color: #111; }
+  #help.hidden { display: block !important; opacity: 0; }
+  #zone { position: fixed; top: 14px; right: 14px; max-width: 60vw; padding: 6px 12px; border-radius: 999px; overflow: hidden;
+          text-overflow: ellipsis; white-space: nowrap; background: rgba(30,30,30,.7); color: #fff; font-size: 13px; pointer-events: none; }
+  #roomBtns { position: fixed; top: 52px; right: 14px; display: flex; gap: 8px; }
+  #roomBtns button { padding: 6px 12px; border-radius: 999px; border: 0; background: rgba(255,255,255,.88); color: #333;
+                     font: inherit; font-size: 13px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+  #roomBtns #exitBtn { background: #2b2b2b; color: #fff; }
+  #stick { position: fixed; left: max(24px, env(safe-area-inset-left)); bottom: max(24px, env(safe-area-inset-bottom));
+           width: 130px; height: 130px; border-radius: 50%; display: none; touch-action: none;
+           background: rgba(40,40,40,.18); border: 2px solid rgba(255,255,255,.7); box-sizing: border-box; }
+  #stick.on { display: block; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px;
+          border-radius: 50%; background: rgba(255,255,255,.9); box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+  #notice { position: fixed; left: 14px; bottom: 14px; max-width: 360px; padding: 10px 14px; border-radius: 10px; z-index: 12;
+            background: rgba(180,60,40,.92); color: #fff; font-size: 13px; line-height: 1.5; display: none; }
+
+  #fps { position: fixed; right: 14px; bottom: 14px; padding: 7px 12px; border-radius: 8px; background: rgba(20,20,20,.78);
+         color: #9be7a8; font: 600 13px/1.4 Consolas, "Malgun Gothic", monospace; pointer-events: none; max-width: calc(100vw - 28px); }
+  #charTest { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 8px; }
+  input.free { width: 36px; height: 36px; padding: 0; border: 2px solid rgba(0,0,0,.15); border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+  input.free::-webkit-color-swatch-wrapper { padding: 0; } input.free::-webkit-color-swatch { border: 0; border-radius: 50%; }
+
+  /* ── 작품 이름표 · 상세 패널 ── */
+  #plate { position: fixed; left: 50%; bottom: max(28px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+           max-width: min(520px, calc(100vw - 32px)); box-sizing: border-box; padding: 12px 22px; border: 0; border-radius: 14px;
+           background: rgba(255,255,255,.95); color: #222; font: inherit; text-align: center; cursor: pointer;
+           box-shadow: 0 4px 18px rgba(0,0,0,.22); transition: opacity .2s, transform .2s; }
+  #plate.hidden { display: block !important; opacity: 0; pointer-events: none; transform: translate(-50%, 12px); }
+  #plate b { display: block; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #plate span { display: block; margin-top: 2px; font-size: 13px; color: #666; }
+  #plate em { display: block; margin-top: 6px; font-size: 12px; font-style: normal; color: #3d7be0; font-weight: 700; }
+  #detail { position: fixed; inset: 0; z-index: 5; background: rgba(20,20,20,.35); display: flex; justify-content: flex-end; }
+  #detailCard { position: relative; width: min(400px, 100vw); height: 100%; box-sizing: border-box; overflow-y: auto;
+                padding: 26px 26px 32px; background: #fffdf8; color: #2b2b2b; box-shadow: -6px 0 24px rgba(0,0,0,.2);
+                -webkit-user-select: text; user-select: text; }
+  #detailClose { position: sticky; top: 0; float: right; width: 38px; height: 38px; margin: -8px -8px 0 0; border: 0; border-radius: 50%;
+                 background: #efeadf; font-size: 22px; line-height: 1; cursor: pointer; color: #333; }
+  #detailImg { display: block; max-width: 100%; max-height: 42vh; margin: 8px auto 18px; box-shadow: 0 2px 12px rgba(0,0,0,.18); background: #eee; }
+  #detailCard h2 { margin: 0 0 4px; font-size: 23px; }
+  #detailArtist { margin: 0 0 16px; font-size: 15px; color: #555; }
+  #detailMeta { margin: 0 0 16px; padding: 12px 14px; border-radius: 10px; background: #f4efe4; font-size: 14px;
+                display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; }
+  #detailMeta dt { color: #8a8272; font-weight: 700; } #detailMeta dd { margin: 0; }
+  #detailDesc { margin: 0; font-size: 15px; line-height: 1.75; white-space: pre-wrap; }
+
+  /* ── 입체 작품 감상 모드 ── */
+  body.viewing #help, body.viewing #zone, body.viewing #roomBtns, body.viewing #stick, body.viewing #plate { display: none !important; }
+  #viewer { position: fixed; inset: 0; z-index: 4; pointer-events: none; color: #2b2b2b; }
+  #viewer > * { pointer-events: auto; }
+  #viewClose, #viewInfoBtn { position: absolute; top: 14px; padding: 9px 16px; border: 0; border-radius: 999px; font: inherit; font-size: 15px;
+                             font-weight: 700; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+  #viewClose { right: 14px; background: #2b2b2b; color: #fff; }
+  #viewInfoBtn { left: 14px; background: rgba(255,255,255,.95); color: #222; display: none; }
+  #viewInfo { position: absolute; top: 14px; left: 14px; width: min(340px, calc(100vw - 28px)); max-height: calc(100% - 130px); box-sizing: border-box;
+              overflow-y: auto; padding: 18px 20px; border-radius: 14px; background: rgba(255,253,248,.94); box-shadow: 0 4px 18px rgba(0,0,0,.2);
+              -webkit-user-select: text; user-select: text; }
+  #viewInfo h2 { margin: 0 0 3px; font-size: 20px; }
+  #viewArtist { margin: 0 0 12px; font-size: 14px; color: #555; }
+  #viewMeta { margin: 0 0 12px; font-size: 13px; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+  #viewMeta dt { color: #8a8272; font-weight: 700; } #viewMeta dd { margin: 0; }
+  #viewDesc { margin: 0; font-size: 14px; line-height: 1.7; white-space: pre-wrap; }
+  #viewBar { position: absolute; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+             max-width: calc(100vw - 24px); box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+             gap: 8px 18px; padding: 10px 18px; border-radius: 16px; background: rgba(255,253,248,.94); box-shadow: 0 4px 18px rgba(0,0,0,.22); font-size: 13px; }
+  #viewBar label { display: flex; align-items: center; gap: 8px; font-weight: 700; color: #4a453b; white-space: nowrap; }
+  #viewBar input[type=range] { width: 120px; accent-color: #3d7be0; }
+  #viewTip { color: #8a8272; white-space: nowrap; }
+  #viewUnlit { display: none; color: #8a8272; }
+  #viewer.unlit #viewBar label { display: none; }
+  #viewer.unlit #viewUnlit { display: inline; }
+
+  /* ── 공통 버튼 ── */
+  .chip { padding: 8px 14px; border-radius: 999px; border: 2px solid #d8d0bf; background: #fff;
+          font: inherit; font-size: 14px; color: #333; cursor: pointer; }
+  .chip.sel { border-color: #3d7be0; background: #3d7be0; color: #fff; }
+
+  /* ── 캐릭터 꾸미기 화면 ── */
+  #custom { position: fixed; inset: 0; z-index: 10; display: flex; color: #2b2b2b; background: linear-gradient(160deg, #fbf7ef, #e8e1d3); }
+  #panel { width: min(440px, 46vw); box-sizing: border-box; padding: 28px 28px 0; overflow-y: auto; display: flex; flex-direction: column; }
+  #panel h1 { margin: 0; font-size: 26px; }
+  #panel .sub { margin: 6px 0 18px; font-size: 14px; color: #6b6558; }
+  .field { margin-bottom: 16px; }
+  .field > span { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 700; color: #4a453b; }
+  #nick { width: 100%; box-sizing: border-box; padding: 10px 12px; font: inherit; font-size: 16px;
+          border: 2px solid #d8d0bf; border-radius: 10px; background: #fff; -webkit-user-select: text; user-select: text; }
+  #nick:focus { outline: none; border-color: #3d7be0; }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .swatch { width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 2px solid rgba(0,0,0,.15); cursor: pointer; }
+  .swatch.sel { box-shadow: 0 0 0 3px #fbf7ef, 0 0 0 6px #3d7be0; }
+  #enterWrap { position: sticky; bottom: 0; margin-top: auto; padding: 12px 0 max(20px, env(safe-area-inset-bottom));
+               background: linear-gradient(transparent, #f1ebdf 30%); }
+  #enter { width: 100%; padding: 14px; border: 0; border-radius: 12px; background: #2b2b2b; color: #fff;
+           font: inherit; font-size: 17px; font-weight: 700; cursor: pointer; }
+  #enter:hover { background: #111; }
+  #stage { position: relative; flex: 1; min-width: 0; min-height: 0; }
+  #preview { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #nickTag { position: absolute; top: 9%; left: 50%; transform: translateX(-50%); padding: 5px 14px; border-radius: 999px;
+             background: rgba(30,30,30,.75); color: #fff; font-size: 15px; white-space: nowrap; pointer-events: none; }
+  #anim { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+
+  /* ── 로비: 전시실 목록 · 테스트 화면 ── */
+  #lobby { position: fixed; inset: 0; z-index: 9; overflow-y: auto; color: #2b2b2b; background: linear-gradient(160deg, #fbf7ef, #e8e1d3); }
+  #lobbyInner { max-width: 1040px; margin: 0 auto; padding: 32px 24px 48px; }
+  #lobbyHead { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+  #lobbyHead h1 { margin: 0; font-size: 28px; } #lobbyHead p { margin: 6px 0 0; font-size: 14px; color: #6b6558; }
+  #roomList { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .roomCard { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 20px; border: 2px solid transparent; border-radius: 16px;
+              background: #fffdf8; box-shadow: 0 2px 12px rgba(0,0,0,.08); font: inherit; color: inherit; text-align: left; cursor: pointer; }
+  .roomCard:hover { border-color: #3d7be0; }
+  .roomCard b { font-size: 20px; } .roomCard .who { font-size: 13px; color: #6b6558; }
+  .roomCard .desc { font-size: 14px; line-height: 1.6; color: #4a453b; } .roomCard .count { margin-top: 6px; font-size: 13px; font-weight: 700; color: #3d7be0; }
+  .tag { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #e3ecfb; color: #2a5fc0; }
+  .tag.solid { background: #fbe9d6; color: #b5651d; }
+  #testToggle { margin-top: 34px; padding: 0; border: 0; background: none; font: inherit; font-size: 13px; color: #8a8272; text-decoration: underline; cursor: pointer; }
+  #testPanel { margin-top: 14px; padding: 20px; border-radius: 16px; background: rgba(255,255,255,.6); }
+  #testPanel h2 { margin: 0 0 4px; font-size: 18px; }
+  #testOpts { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 12px 0 16px; }
+  .testOpt { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: #4a453b; }
+  .testOpt select { padding: 6px 8px; font: inherit; font-size: 14px; border: 2px solid #d8d0bf; border-radius: 8px; background: #fff; }
+  #testCards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .testCard { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; background: #fffdf8; box-shadow: 0 1px 8px rgba(0,0,0,.08); }
+  .testCard canvas { width: 100%; height: auto; border-radius: 8px; background: #e7e2d6; }
+  .testCard .chip { align-self: flex-start; }
+  #loading { position: fixed; inset: 0; z-index: 11; display: flex; align-items: center; justify-content: center;
+             background: #f1ebdf; color: #4a453b; font-size: 17px; }
+  #error { position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center; background: #f1ebdf;
+           padding: 24px; text-align: center; color: #333; font-size: 15px; line-height: 1.7; }
+
+  @media (max-width: 700px) {
+    #help { top: 92px; }
+    #plate { bottom: calc(max(24px, env(safe-area-inset-bottom)) + 146px); }
+    #detail { align-items: flex-end; }
+    #detailCard { width: 100%; height: auto; max-height: 78vh; border-radius: 18px 18px 0 0; padding: 20px 20px 28px; }
+    #detailImg { max-height: 30vh; }
+    #viewInfoBtn { display: block; }
+    #viewInfo { display: none; top: 62px; max-height: 45vh; }
+    #viewer.info #viewInfo { display: block; }
+    #viewTip { display: none; }
+    #viewBar input[type=range] { width: 96px; }
+    #custom { flex-direction: column-reverse; }
+    #panel { width: 100%; flex: 1; min-height: 0; padding: 16px 18px 0; }
+    #panel h1 { font-size: 21px; } #panel .sub { margin-bottom: 12px; }
+    #stage { flex: none; height: 36vh; }
+    #anim { bottom: 8px; } #anim .chip { padding: 5px 12px; font-size: 13px; }
+    #lobbyInner { padding: 22px 16px 40px; } #lobbyHead h1 { font-size: 23px; }
+  }
+
+  /* ── 화면 안의 작은 창 (예/아니오, 입장 코드, 공유) ── */
+  .dlg { position: fixed; inset: 0; z-index: 13; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(20,20,20,.4); }
+  .dlgPanel { width: min(360px, 100%); box-sizing: border-box; padding: 24px 22px 20px; border-radius: 16px; background: #fffdf8; color: #2b2b2b;
+              box-shadow: 0 8px 40px rgba(0,0,0,.35); -webkit-user-select: text; user-select: text; }
+  .dlgText { margin: 0 0 6px; font-size: 17px; font-weight: 700; line-height: 1.5; white-space: pre-wrap; }
+  .dlgPanel .muted { margin: 0 0 12px; }
+  .dlgPanel input { width: 100%; box-sizing: border-box; padding: 11px 12px; font: inherit; font-size: 16px; border: 2px solid #d8d0bf; border-radius: 10px; background: #fff; }
+  .dlgPanel input:focus { outline: none; border-color: #3d7be0; }
+  .dlgMsg { min-height: 20px; margin: 8px 0 0; font-size: 14px; font-weight: 700; color: #c0392b; }
+  .dlgBtns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
+  .dlgMain { padding: 10px 20px; border: 0; border-radius: 999px; background: #2b2b2b; color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .dlgMain:disabled { opacity: .5; }
+  .dlgQr { display: block; width: 220px; height: 220px; margin: 4px auto 14px; image-rendering: pixelated; border-radius: 8px; }
+
+  /* ── 학생 로그인 창 ── */
+  .lobbyBtns { display: flex; gap: 8px; flex-wrap: wrap; }
+  #loginBox, #pwBox { position: fixed; inset: 0; z-index: 12; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(20,20,20,.4); }
+  .loginForm { width: min(340px, 100%); box-sizing: border-box; padding: 24px 22px 20px; border-radius: 16px; background: #fffdf8; color: #2b2b2b; box-shadow: 0 8px 40px rgba(0,0,0,.35);
+               -webkit-user-select: text; user-select: text; }
+  .loginForm h2 { margin: 0 0 2px; font-size: 21px; } .loginForm .muted { margin: 0 0 14px; }
+  .loginForm label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; font-weight: 700; color: #4a453b; }
+  .loginForm label.hidden { display: none; }
+  .loginForm input { padding: 11px 12px; font: inherit; font-size: 18px; border: 2px solid #d8d0bf; border-radius: 10px; background: #fff; letter-spacing: .04em; }
+  .loginForm input:focus { outline: none; border-color: #3d7be0; }
+  #loginMsg, #pwMsg { min-height: 20px; margin: 0 0 10px; font-size: 14px; color: #c0392b; font-weight: 700; }
+  .loginForm div { display: flex; gap: 10px; justify-content: flex-end; }
+  #loginSubmit, #pwSubmit { padding: 10px 22px; border: 0; border-radius: 999px; background: #2b2b2b; color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+  #loginSubmit:disabled, #pwSubmit:disabled { opacity: .5; }
+
+  /* ── 복셀 캐릭터 편집기 (위의 예전 꾸미기 화면 규칙을 덮어씀) ── */
+  #custom { flex-direction: row !important; }
+  #edStage { position: relative; flex: 1; min-width: 0; min-height: 0; }
+  #preview { touch-action: none; cursor: crosshair; }
+  #edTop { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 8px; padding: 12px 14px; flex-wrap: wrap; }
+  #edTop .grow { flex: 1; }
+  #nick { width: 150px; padding: 8px 10px; font-size: 15px; }
+  #edCount { padding: 6px 12px; border-radius: 999px; background: rgba(30,30,30,.72); color: #fff; font-size: 13px; font-weight: 700; white-space: nowrap; }
+  #edCount.low { background: #c0392b; }
+  #enter { width: auto; padding: 9px 22px; border-radius: 999px; font-size: 15px; }
+  #edToast { position: absolute; top: 76px; left: 50%; transform: translateX(-50%); padding: 10px 18px; border-radius: 12px; z-index: 2;
+             background: rgba(30,30,30,.88); color: #fff; font-size: 15px; font-weight: 700; white-space: nowrap; pointer-events: none; }
+  #edConfirm { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 4; width: min(320px, calc(100% - 40px)); box-sizing: border-box;
+               padding: 22px 20px 18px; border-radius: 16px; background: #fffdf8; box-shadow: 0 8px 40px rgba(0,0,0,.35); text-align: center; color: #2b2b2b; }
+  #edConfirm p { margin: 0 0 6px; font-size: 16px; font-weight: 700; line-height: 1.5; }
+  #edConfirm small { color: #8a8272; font-size: 13px; }
+  #edConfirm div { display: flex; gap: 10px; justify-content: center; margin-top: 16px; }
+  #edConfirm button { min-width: 96px; padding: 10px 16px; font-size: 15px; }
+  #edConfirmYes { border: 0; border-radius: 999px; background: #c0392b; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  #edBar { position: absolute; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: calc(100% - 16px);
+           box-sizing: border-box; padding: 8px 10px; border-radius: 18px; background: rgba(255,253,248,.95); box-shadow: 0 4px 18px rgba(0,0,0,.2); }
+  #edHint { margin: 0 4px 6px; font-size: 12px; color: #8a8272; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #edTools, #edActs { display: flex; gap: 6px; justify-content: center; }
+  #edActs { margin-top: 6px; padding-top: 6px; border-top: 1px solid #e6dfd0; }
+  #edTools button, #edActs button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 62px; min-height: 54px;
+           padding: 6px 8px; border: 2px solid transparent; border-radius: 12px; background: #f3eee2; color: #333; font: inherit; font-size: 12px; white-space: nowrap; letter-spacing: -0.03em; cursor: pointer; }
+  #edTools button i, #edActs button i { font-style: normal; font-size: 20px; line-height: 1; }
+  #edTools button.sel, #edActs button.sel { border-color: #3d7be0; background: #e3ecfb; color: #1d3f7a; font-weight: 700; }
+  #edActs button { min-height: 46px; background: none; }
+  #edActs button:disabled { opacity: .35; cursor: default; }
+  #edColorDot { display: block; width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(0,0,0,.25); box-sizing: border-box; }
+  #anim { display: none; bottom: 22px; }
+  #custom.previewing #anim { display: flex; }
+  #custom.previewing #edBar, #custom.previewing #edCount, #custom.previewing #edSide { display: none; }
+  #edSide { position: relative; width: 300px; box-sizing: border-box; padding: 18px 18px 24px; overflow-y: auto; background: rgba(255,253,248,.9); box-shadow: -2px 0 14px rgba(0,0,0,.08); }
+  #edSide h3 { margin: 16px 0 8px; font-size: 13px; color: #4a453b; } #edSide h3:first-of-type { margin-top: 0; }
+  #edSideClose { display: none; position: absolute; top: 10px; right: 12px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #efeadf; font-size: 20px; cursor: pointer; }
+  #edPalette { gap: 6px; } #edPalette .swatch, #edRecent .swatch { width: 27px; height: 27px; }
+  #edRecent { min-height: 27px; gap: 6px; }
+  .pickRow { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: #4a453b; cursor: pointer; }
+  .pickRow input, .regionColor input { width: 34px; height: 34px; padding: 0; border: 2px solid rgba(0,0,0,.15); border-radius: 8px; background: none; cursor: pointer; }
+  #fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .regionColor { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #4a453b; cursor: pointer; }
+  @media (max-width: 760px) {
+    #edStage { height: auto !important; }
+    #edTop { padding: 8px; gap: 6px; } #nick { width: 96px; padding: 7px 8px; font-size: 14px; }
+    #edPreview { padding: 7px 10px; font-size: 13px; } #enter { padding: 8px 16px; }
+    #edBar { left: 8px; right: 8px; transform: none; max-width: none; }
+    #edTools button, #edActs button { flex: 1; min-width: 0; min-height: 58px; padding: 6px 2px; font-size: 11px; }
+    #edTools button i { font-size: 24px; } #edActs button { min-height: 48px; }
+    #edSide { position: absolute; left: 0; right: 0; bottom: 0; width: auto; max-height: 70%; border-radius: 18px 18px 0 0; z-index: 3;
+              box-shadow: 0 -6px 24px rgba(0,0,0,.25); background: #fffdf8; display: none; }
+    #edSide.open { display: block; }
+    #edSideClose { display: block; }
+    #edPalette .swatch, #edRecent .swatch { width: 36px; height: 36px; }
+  }
+</style>
+</head>
+<body data-state="customize">
+<canvas id="view"></canvas>
+
+<!-- 전시실 안 -->
+<div id="help" class="hud"></div>
+<div id="zone" class="hud"></div>
+<div id="roomBtns" class="hud">
+  <button id="shareBtn" type="button">공유</button>
+  <button id="editBtn" type="button">캐릭터 꾸미기</button>
+  <button id="exitBtn" type="button">← 전시실 나가기</button>
+</div>
+<div id="stick" class="hud"><div id="knob"></div></div>
+<div id="notice"></div>
+<div id="fps" class="hud hidden"></div>
+<button id="plate" class="hud hidden" type="button"><b id="plateTitle"></b><span id="plateArtist"></span><em id="plateHint"></em></button>
+<div id="viewer" class="hidden">
+  <button id="viewClose" type="button">× 닫기</button>
+  <button id="viewInfoBtn" type="button">작품 정보</button>
+  <div id="viewInfo">
+    <h2 id="viewTitle"></h2>
+    <p id="viewArtist"></p>
+    <dl id="viewMeta"></dl>
+    <p id="viewDesc"></p>
+  </div>
+  <div id="viewBar">
+    <button id="viewAuto" class="chip sel" type="button">자동 회전 켜짐</button>
+    <label>조명 방향 <input id="viewAz" type="range" min="0" max="360" value="40"></label>
+    <label>조명 높이 <input id="viewEl" type="range" min="5" max="85" value="45"></label>
+    <span id="viewUnlit">스플랫 작품은 촬영 당시의 빛이 담겨 있어 조명을 바꿀 수 없습니다</span>
+    <span id="viewTip">드래그: 돌려 보기 · 휠/두 손가락: 확대</span>
+  </div>
+</div>
+<div id="detail" class="hidden">
+  <div id="detailCard" role="dialog" aria-labelledby="detailTitle">
+    <button id="detailClose" type="button" aria-label="닫기">×</button>
+    <img id="detailImg" alt="">
+    <h2 id="detailTitle"></h2>
+    <p id="detailArtist"></p>
+    <dl id="detailMeta"></dl>
+    <p id="detailDesc"></p>
+  </div>
+</div>
+
+<!-- 로비: 전시실 목록 -->
+<div id="lobby" class="hidden">
+  <div id="lobbyInner">
+    <div id="lobbyHead">
+      <div><h1>전시실 둘러보기</h1><p>들어가고 싶은 전시실을 골라 주세요.</p></div>
+      <div class="lobbyBtns">
+        <button id="lobbyLogin" class="chip hidden" type="button">학생 로그인</button>
+        <button id="lobbyPw" class="chip hidden" type="button">비밀번호 바꾸기</button>
+        <button id="lobbyCustomize" class="chip" type="button">캐릭터 다시 꾸미기</button>
+      </div>
+    </div>
+    <div id="roomList"></div>
+    <button id="testToggle" type="button">공간 확인용 테스트 화면</button>
+    <div id="testPanel" class="hidden">
+      <h2>공간 확인용 테스트</h2>
+      <p class="muted">유형과 작품 수에 따라 공간이 어떻게 만들어지는지 평면도로 확인하고, 임시 작품을 채운 상태로 들어가 볼 수 있습니다.<br>
+        파랑 = 벽 자리(액자), 주황 = 바닥 자리(받침대 최대 크기), 초록 = 입구와 입장 위치, 숫자 = 자리 번호</p>
+      <div id="testOpts"></div>
+      <div id="testCards"></div>
+      <h2 style="margin-top: 26px">복셀 캐릭터 테스트</h2>
+      <p class="muted">같은 캐릭터 30명을 전시실에 띄워 화면 오른쪽 아래에 fps 를 표시합니다. 휴대폰에서 직접 열어 확인해 주세요.<br>
+        기본 모형은 MagicaVoxel(.vox) 파일로 바꿀 수 있습니다. 팔레트 1~6번 = 피부 · 머리카락 · 눈 · 상의 · 하의 · 신발 (위 테마 선택이 테스트 전시실에도 적용됩니다)</p>
+      <div id="charTest">
+        <button id="crowdBtn" class="chip" type="button">캐릭터 30명 성능 테스트</button>
+        <label class="chip">.vox 불러오기<input id="voxFile" type="file" accept=".vox" hidden></label>
+        <button id="voxExport" class="chip" type="button">기본 모형 .vox 로 내보내기</button>
+        <button id="voxReset" class="chip" type="button">내장 기본 모형으로 되돌리기</button>
+      </div>
+      <p id="voxMsg" class="muted"></p>
+    </div>
+  </div>
+</div>
+
+<!-- 학생 로그인 창 -->
+<div id="loginBox" class="hidden">
+  <form id="loginForm" class="loginForm" autocomplete="off">
+    <h2>학생 로그인</h2>
+    <p class="muted">학번과 비밀번호를 적어 주세요. 처음 비밀번호는 선생님이 알려 주세요. 별명은 들어간 뒤 캐릭터 꾸미기에서 정해요.</p>
+    <label>학번<input id="loginCode" type="text" inputmode="numeric" maxlength="6" placeholder="예: 20315 (2학년 3반 15번)" spellcheck="false"></label>
+    <label>비밀번호<input id="loginPin" type="password" maxlength="20" placeholder="••••"></label>
+    <label id="loginClassRow" class="hidden">학급 코드<input id="loginClass" type="text" maxlength="20" placeholder="예: HB-2-3" autocapitalize="characters" spellcheck="false"></label>
+    <p id="loginMsg"></p>
+    <div><button id="loginCancel" class="chip" type="button">취소</button><button id="loginSubmit" type="submit">로그인</button></div>
+  </form>
+</div>
+
+<!-- 학생: 비밀번호 바꾸기 -->
+<div id="pwBox" class="hidden">
+  <form id="pwForm" class="loginForm" autocomplete="off">
+    <h2>비밀번호 바꾸기</h2>
+    <p id="pwHint" class="muted">나만 아는 비밀번호로 바꿔요. (빈칸 없이 4~20자)</p>
+    <label>지금 비밀번호<input id="pwCurrent" type="password" maxlength="20"></label>
+    <label>새 비밀번호<input id="pwNext" type="password" maxlength="20"></label>
+    <label>새 비밀번호 한 번 더<input id="pwAgain" type="password" maxlength="20"></label>
+    <p id="pwMsg"></p>
+    <div><button id="pwCancel" class="chip" type="button">나중에</button><button id="pwSubmit" type="submit">바꾸기</button></div>
+  </form>
+</div>
+
+<!-- 캐릭터 꾸미기 -->
+<div id="custom" class="hidden">
+  <!-- 가운데: 캐릭터와 도구 -->
+  <div id="edStage">
+    <canvas id="preview"></canvas>
+    <div id="edTop">
+      <input id="nick" type="text" maxlength="12" autocomplete="off" spellcheck="false" placeholder="별명" aria-label="별명">
+      <span id="edCount"></span>
+      <span class="grow"></span>
+      <button id="edPreview" class="chip" type="button">전시장에서 미리보기</button>
+      <button id="enter" type="button">완료</button>
+    </div>
+    <div id="edToast" class="hidden"></div>
+    <div id="edConfirm" class="hidden">
+      <p>붙인 픽셀과 칠한 색을 모두 지우고<br>처음 모습으로 돌아갈까요?</p>
+      <small>되돌리기로 다시 살릴 수 있어요</small>
+      <div><button id="edConfirmNo" class="chip" type="button">취소</button><button id="edConfirmYes" type="button">초기화</button></div>
+    </div>
+    <div id="anim">
+      <button class="chip" type="button" data-speed="0">대기</button>
+      <button class="chip sel" type="button" data-speed="3.2">걷기</button>
+      <button class="chip" type="button" data-speed="6">뛰기</button>
+    </div>
+    <div id="edBar">
+      <div id="edHint"></div>
+      <div id="edTools"></div>
+      <div id="edActs">
+        <button id="edColorBtn" type="button" title="색 고르기"><i id="edColorDot"></i><span>색</span></button>
+        <button id="edSym" type="button" title="좌우 대칭"><i>↔️</i><span>대칭</span></button>
+        <button id="edUndo" type="button" title="되돌리기 (Ctrl+Z)"><i>↩️</i><span>되돌리기</span></button>
+        <button id="edRedo" type="button" title="다시하기 (Ctrl+Y)"><i>↪️</i><span>다시하기</span></button>
+        <button id="edReset" type="button" title="처음 상태로"><i>🗑️</i><span>초기화</span></button>
+      </div>
+    </div>
+  </div>
+  <!-- 색: PC 는 오른쪽 패널, 휴대폰은 '색' 버튼을 누르면 아래에서 올라옴 -->
+  <div id="edSide">
+    <button id="edSideClose" type="button" aria-label="닫기">×</button>
+    <h3>색</h3>
+    <div id="edPalette" class="opts"></div>
+    <label class="pickRow"><input id="edPicker" type="color"> 다른 색 직접 고르기</label>
+    <h3>최근 사용한 색</h3>
+    <div id="edRecent" class="opts"></div>
+    <h3>기본 몸 색 한 번에 바꾸기</h3>
+    <div id="fields"></div>
+    <p class="muted">길게 누르면(휴대폰) 어떤 도구에서든 지우기가 됩니다.</p>
+  </div>
+</div>
+
+<div id="loading" class="hidden"><span id="loadingText"></span></div>
+<div id="error">3D 라이브러리를 불러오지 못했습니다.<br>인터넷 연결을 확인한 뒤 새로고침해 주세요.</div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+    "@sparkjsdev/spark": "https://sparkjs.dev/releases/spark/2.4.0/spark.module.js",
+    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm"
+} }
+</script>
+<script>
+  // 라이브러리나 프로그램 파일을 불러오지 못하면 안내 표시
+  window.addEventListener('error', (e) => {
+    if (e.target && e.target.tagName === 'SCRIPT') document.getElementById('error').style.display = 'flex';
+  }, true);
+</script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

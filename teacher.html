@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>가상 미술관 · 교사용</title>
+<style>
+  body { margin: 0; background: #f4efe6; color: #2b2b2b; font-family: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; line-height: 1.6; }
+  .hidden { display: none !important; }
+  .muted { color: #8a8272; font-size: 13px; } .pre { white-space: pre-wrap; } .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px 20px 60px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  h1 { margin: 0; font-size: 24px; } h2 { margin: 0 0 10px; font-size: 18px; } h3 { margin: 18px 0 8px; font-size: 15px; }
+  section, .panel { background: #fffdf8; border-radius: 14px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 8px rgba(0,0,0,.06); }
+  input, textarea, button, select { font: inherit; }
+  input[type=text], input[type=email], input[type=password], input[type=number], input[type=date], textarea, select {
+    box-sizing: border-box; padding: 8px 10px; border: 2px solid #d8d0bf; border-radius: 9px; background: #fff; font-size: 14px; max-width: 100%; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: #3d7be0; }
+  textarea { width: 100%; resize: vertical; }
+  #roster { min-height: 150px; font-family: Consolas, "Malgun Gothic", monospace; }
+  button { padding: 9px 16px; border: 0; border-radius: 9px; background: #2b2b2b; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.light { background: #ece6d8; color: #333; } button.danger { background: #c0392b; color: #fff; }
+  button.small, label.small { padding: 5px 10px; font-size: 13px; background: #ece6d8; color: #333; border-radius: 8px; font-weight: 700; cursor: pointer; }
+  button.small.danger { background: #f6dcd8; color: #a8281c; } label.link { background: none; text-decoration: underline; color: #2a5fc0; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; } .row.between { justify-content: space-between; align-items: center; } .row.end { justify-content: flex-end; margin-top: 14px; }
+  .row.acts { align-items: center; margin-top: 10px; gap: 8px; } .line { padding: 8px 0; border-bottom: 1px solid #ece6d8; }
+  label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; color: #4a453b; } label.f.wide { margin-bottom: 10px; } label.f.wide input { width: 100%; }
+  label.f.inline { flex-direction: row; align-items: center; gap: 8px; margin-top: 8px; } label.check { display: flex; gap: 8px; align-items: center; margin: 8px 0; font-size: 14px; }
+  #msg { padding: 12px 14px; border-radius: 10px; margin-bottom: 14px; white-space: pre-wrap; }
+  #msg.info { background: #e3ecfb; color: #1d3f7a; } #msg.error { background: #f6dcd8; color: #a8281c; }
+  #demoBanner { background: #fff3cd; color: #7a5b00; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 14px; }
+  .warnBox { background: #f6dcd8; color: #a8281c; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin: 6px 0; }
+
+  /* 탭 */
+  #tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  #tabs button { background: #e6dfd0; color: #4a453b; border-radius: 999px; padding: 8px 18px; } #tabs button.sel { background: #2b2b2b; color: #fff; }
+
+  /* 전시실 카드 */
+  #roomCards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .roomCard { background: #fffdf8; border-radius: 14px; padding: 18px; box-shadow: 0 1px 8px rgba(0,0,0,.08); display: flex; flex-direction: column; gap: 6px; }
+  .roomCard > b { font-size: 19px; }
+  .tag { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #ece6d8; color: #4a453b; }
+  .tag.flat { background: #e3ecfb; color: #2a5fc0; } .tag.sculpture { background: #fbe9d6; color: #b5651d; }
+  .tag.public { background: #dff3e6; color: #1e7a45; } .tag.private { background: #eee; color: #666; } .tag.class { background: #efe3fb; color: #6a3fb0; }
+  .meter { display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; align-items: center; font-size: 13px; }
+  .bar, .usage, .cBar { height: 8px; border-radius: 999px; background: #ece6d8; overflow: hidden; } .usage { height: 18px; margin-bottom: 8px; }
+  .bar i, .usage i, .cBar i { display: block; height: 100%; background: #3d7be0; border-radius: 999px; } .bar i.full, .usage i.full { background: #c0392b; }
+  .chart { display: grid; gap: 6px; } .cRow { display: grid; grid-template-columns: 110px 1fr 70px; gap: 8px; align-items: center; font-size: 13px; } .cName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* 창 · 마법사 */
+  .overlay { position: fixed; inset: 0; background: rgba(20,20,20,.4); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 5; }
+  .overlay .panel { max-width: 420px; width: 100%; margin: 0; max-height: calc(100vh - 32px); overflow-y: auto; box-sizing: border-box; } .overlay .panel.wide { max-width: 720px; }
+  .steps { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; } .steps span { padding: 4px 12px; border-radius: 999px; background: #ece6d8; color: #8a8272; font-size: 13px; font-weight: 700; }
+  .steps span.on { background: #3d7be0; color: #fff; } .steps span.done { background: #dbe7fb; color: #2a5fc0; }
+  .wizBody { min-height: 220px; } .wizErr { color: #c0392b; font-weight: 700; min-height: 22px; margin: 8px 0 0; font-size: 14px; white-space: pre-wrap; }
+  .typeGrid, .visGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 10px; } .visGrid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .typeCard, .visCard { display: flex; flex-direction: column; gap: 6px; align-items: stretch; text-align: left; padding: 14px; background: #f7f2e8; color: #2b2b2b; border: 2px solid transparent; font-weight: 400; }
+  .typeCard.sel, .visCard.sel { border-color: #3d7be0; background: #e9f0fc; } .typeCard b, .visCard b { font-size: 16px; }
+  .big { font-size: 22px; min-width: 60px; } input[type=range] { accent-color: #3d7be0; flex: 1; min-width: 180px; }
+  .slider { display: grid; grid-template-columns: 150px 1fr 48px; gap: 10px; align-items: center; font-size: 13px; margin: 6px 0; }
+  .adjStage { background: #e9e6df; border-radius: 10px; overflow: hidden; margin-bottom: 10px; min-height: 60px; } .adjStage canvas { display: block; } .adjStage p { padding: 16px; margin: 0; }
+  .cropBox { margin-top: 10px; padding-top: 10px; border-top: 1px solid #ece6d8; } .cropBox input[type=number] { width: 92px; }
+
+  /* 평면도 */
+  .plan { position: relative; width: 100%; background: #e7e2d6; border-radius: 10px; max-height: 420px; margin: 0 auto; } .plan.preview { max-height: 200px; pointer-events: none; }
+  .plan svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .pFloor { fill: #f3ede0; } .pWall { stroke: #3a3a3a; stroke-width: .3; stroke-linecap: square; } .pDoor { stroke: #3aa76d; stroke-width: .45; } .pBoard { stroke: #8d8779; stroke-width: .2; }
+  .pDot, .pSlot { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .pDot { width: 16px; height: 16px; border-radius: 50%; font-size: 9px; color: #fff; background: #3d7be0; } .pDot.floor { background: #e2893d; border-radius: 3px; }
+  .pSlot { width: 30px; height: 30px; padding: 0; border-radius: 7px; font-size: 12px; background: #fff; color: #8a8272; border: 2px dashed #b9b09c; background-size: cover; background-position: center; }
+  .pSlot.filled { border: 2px solid #3d7be0; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; cursor: grab; background-color: #9db8e8; }
+  .pSlot.sel { outline: 3px solid #f2b33d; outline-offset: 1px; } .pSlot.over { border-color: #f2b33d; background-color: #fff3cd; }
+
+  /* 작품 등록 */
+  .drop { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 26px 16px; margin: 12px 0; border: 2px dashed #b9b09c; border-radius: 14px; background: #fffdf8; cursor: pointer; text-align: center; }
+  .drop.over { border-color: #3d7be0; background: #e9f0fc; } .drop.off { opacity: .55; cursor: default; }
+  details.csv { margin: 12px 0; padding: 12px 14px; border-radius: 10px; background: #fffdf8; } details.csv summary { cursor: pointer; font-weight: 700; font-size: 14px; } details.csv textarea { font-family: Consolas, "Malgun Gothic", monospace; font-size: 13px; margin-bottom: 8px; }
+  .qLine { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr; gap: 10px; padding: 6px 10px; font-size: 13px; border-radius: 8px; background: #fffdf8; margin-bottom: 4px; white-space: pre-wrap; }
+  .qLine.ok .qState { color: #1e7a45; font-weight: 700; } .qLine.bad { background: #fbeeeb; } .qLine.bad .qState { color: #a8281c; } .qName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+  .planWrap, #artView > h3 { margin-top: 18px; } .planWrap { background: #fffdf8; border-radius: 14px; padding: 16px; }
+  .artList { display: grid; gap: 10px; }
+  .artCard { display: grid; grid-template-columns: 130px 1fr; gap: 14px; background: #fffdf8; border-radius: 12px; padding: 12px; border: 2px solid transparent; } .artCard.sel { border-color: #f2b33d; }
+  .artPic { position: relative; height: 130px; border-radius: 8px; background: #e7e2d6 center / contain no-repeat; display: flex; align-items: center; justify-content: center; color: #8a8272; font-size: 13px; cursor: pointer; }
+  .slotNo { position: absolute; top: 6px; left: 6px; padding: 1px 8px; border-radius: 999px; background: rgba(30,30,30,.75); color: #fff; font-size: 12px; font-weight: 700; }
+  .artForm { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .artForm textarea, .artForm .sizes, .artForm label { grid-column: 1 / -1; } .sizes { align-items: center; font-size: 13px; } .sizes input { width: 78px; }
+
+  /* 학급 · 로그인 카드 */
+  #classList { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .classCard { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px; background: #f7f2e8; color: #2b2b2b; border: 2px solid transparent; text-align: left; font-weight: 400; }
+  .classCard.sel { border-color: #3d7be0; background: #e9f0fc; }
+  .code { font-family: Consolas, monospace; font-weight: 700; font-size: 17px; color: #2a5fc0; letter-spacing: .04em; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; } th, td { padding: 8px 10px; border-bottom: 1px solid #ece6d8; text-align: left; } th { font-size: 13px; color: #6b6558; }
+  td.warn { color: #c0392b; font-weight: 700; } td button { margin-right: 6px; }
+  #rosterErrors { color: #c0392b; white-space: pre-wrap; font-size: 13px; }
+  #cardGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-top: 14px; }
+  .card { border: 2px dashed #b9b09c; border-radius: 12px; padding: 14px 16px; background: #fff; break-inside: avoid; }
+  .cTop { font-size: 12px; color: #6b6558; } .cName { font-size: 18px; font-weight: 700; margin: 2px 0 8px; }
+  .card dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font-size: 14px; }
+  .card dt { color: #6b6558; } .card dd { margin: 0; font-family: Consolas, monospace; font-weight: 700; font-size: 16px; } .card dd.pin { font-size: 22px; letter-spacing: .15em; }
+  .cUrl { margin-top: 8px; font-size: 11px; color: #6b6558; word-break: break-all; } .cTip { font-size: 11px; color: #8a8272; }
+
+  /* 공유(QR) 창 — 미술관과 같은 모양 */
+  .dlg { position: fixed; inset: 0; z-index: 13; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(20,20,20,.4); }
+  .dlgPanel { width: min(360px, 100%); box-sizing: border-box; padding: 24px 22px 20px; border-radius: 16px; background: #fffdf8; box-shadow: 0 8px 40px rgba(0,0,0,.35); }
+  .dlgText { margin: 0 0 6px; font-size: 17px; font-weight: 700; } .dlgPanel .muted { margin: 0 0 12px; } .dlgPanel input { width: 100%; }
+  .dlgMsg { min-height: 20px; margin: 8px 0 0; font-size: 14px; font-weight: 700; color: #1e7a45; } .dlgBtns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
+  .dlgBtns .chip { background: #ece6d8; color: #333; } .dlgQr { display: block; width: 220px; height: 220px; margin: 4px auto 14px; image-rendering: pixelated; }
+
+  @media (max-width: 640px) { .artCard { grid-template-columns: 1fr; } .artForm { grid-template-columns: 1fr; } .slider { grid-template-columns: 1fr; gap: 2px; } }
+  /* 인쇄: 로그인 카드만 */
+  @media print {
+    body { background: #fff; } main { padding: 0; max-width: none; }
+    header, #tabs, section:not(#cards), #msg, #demoBanner, .noprint, .overlay, #roomsTab, #adminTab { display: none !important; }
+    #cards { box-shadow: none; padding: 0; } #cardGrid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>가상 미술관 · 교사용</h1>
+    <div class="row noprint" style="align-items:center"><span id="who" class="muted"></span><a href="./" class="muted">미술관으로</a><button id="logout2" type="button" class="small">로그아웃</button></div>
+  </header>
+  <div id="demoBanner" class="hidden">연습 모드입니다. 여기서 만든 전시실 · 작품 · 학급은 저장되지 않고, 새로고침하면 사라집니다. (화면을 미리 써 보는 용도. 관리자 탭도 볼 수 있습니다)</div>
+  <div id="msg" class="hidden"></div>
+
+  <!-- 로그인 -->
+  <section id="loginView" class="hidden">
+    <h2>교사 로그인</h2>
+    <form id="loginForm" class="row">
+      <label class="f">이메일<input id="email" type="email" autocomplete="username" required></label>
+      <label class="f">비밀번호<input id="password" type="password" autocomplete="current-password" required></label>
+      <button id="loginBtn" type="submit">로그인</button>
+    </form>
+    <h3>처음이신가요?</h3>
+    <p class="muted">위에 이메일과 비밀번호(8자 이상)를 적고, 아래에 이름과 학교를 적은 뒤 가입 신청을 누르세요. 관리자가 승인하면 전시실을 만들 수 있습니다.</p>
+    <div class="row">
+      <label class="f">이름<input id="tName" type="text" maxlength="40"></label>
+      <label class="f">학교<input id="tSchool" type="text" maxlength="60"></label>
+      <button id="signupBtn" type="button" class="light">가입 신청</button>
+    </div>
+  </section>
+
+  <div id="appView" class="hidden">
+    <section id="pending" class="hidden">
+      <h2>승인을 기다리는 중입니다</h2>
+      <p>관리자가 승인하면 전시실을 만들고 학생을 등록할 수 있습니다.</p>
+      <button id="logout" type="button" class="light">로그아웃</button>
+    </section>
+
+    <nav id="tabs" class="hidden noprint">
+      <button id="tab-rooms" type="button">내 전시실</button>
+      <button id="tab-classes" type="button">학급 · 학생</button>
+      <button id="tab-admin" type="button" class="hidden">관리자</button>
+    </nav>
+
+    <!-- 내 전시실 -->
+    <div id="roomsTab" class="hidden">
+      <div id="roomsView">
+        <div class="row between" style="margin-bottom:12px">
+          <span id="roomQuota" class="muted"></span>
+          <button id="newRoomBtn" type="button">+ 새 전시실 만들기</button>
+        </div>
+        <div id="roomCards"></div>
+      </div>
+      <div id="artView" class="hidden"></div>
+    </div>
+
+    <!-- 학급 · 학생 -->
+    <div id="classesTab" class="hidden">
+      <section>
+        <h2>내 학급</h2>
+        <div id="classList"></div>
+        <h3>새 학급 만들기</h3>
+        <form id="classForm" class="row">
+          <label class="f">학교 이름<input id="cSchool" type="text" maxlength="60" placeholder="예: 한빛초등학교"></label>
+          <label class="f">학년<input id="cGrade" type="number" min="1" max="12" style="width:80px"></label>
+          <label class="f">반<input id="cNo" type="number" min="1" max="40" style="width:80px"></label>
+          <button id="classBtn" type="submit">학급 만들기</button>
+        </form>
+        <p class="muted">학급 코드는 자동으로 만들어집니다. (학교 이름 앞 두 글자의 첫소리 + 학년 + 반, 예: 한빛초 2학년 3반 → HB-2-3)</p>
+      </section>
+
+      <section id="classDetail" class="hidden">
+        <h2><span id="classTitle"></span> · 학급 코드 <span id="classCode" class="code"></span></h2>
+        <h3>학생 <span id="studentCount" class="muted"></span></h3>
+        <p id="noStudents" class="muted">아직 등록된 학생이 없습니다.</p>
+        <table><thead><tr><th>번호</th><th>이름 (교사만 봄)</th><th>별명 (학생 화면)</th><th>상태</th><th></th></tr></thead><tbody id="studentRows"></tbody></table>
+
+        <h3>명단 등록</h3>
+        <p class="muted">한 줄에 한 명씩 <b>번호, 이름</b>을 적거나, 엑셀·한글 표에서 두 칸을 복사해 붙여 넣으세요. CSV 파일도 됩니다. 번호를 생략하면 차례대로 매깁니다.<br>
+          학생 화면에는 여기 적은 이름이 나오지 않고, 학생이 직접 정한 별명만 나옵니다. 학생은 <b>학번(학년+반+번호, 예: 20315)과 비밀번호</b>로 들어옵니다.<br>
+          처음 비밀번호는 선생님이 정하고, 학생이 로그인하면 스스로 바꾸도록 안내가 나옵니다. 학생이 잊어버리면 위 표의 <b>비밀번호 초기화</b>를 누르세요.</p>
+        <textarea id="roster" placeholder="1, 김하늘&#10;2, 이도윤&#10;3, 박서연"></textarea>
+        <div class="row" style="margin-top:8px; align-items:center">
+          <label class="f">처음 비밀번호<input id="rosterPw" type="text" maxlength="20" value="1234" autocomplete="off" style="width:120px"></label>
+          <button id="rosterBtn" type="button">학생 등록하기</button>
+          <label class="small link">CSV 파일 선택 <input id="rosterFile" type="file" accept=".csv,.txt" hidden></label>
+          <span id="rosterInfo" class="muted"></span>
+        </div>
+        <div id="rosterErrors"></div>
+
+        <h3>학년말 정리</h3>
+        <p class="muted">이 학급의 학생 계정, 캐릭터, 선물 아이템을 모두 지우고 학급도 삭제합니다. 되돌릴 수 없습니다. 전시실과 작품은 지워지지 않습니다.</p>
+        <button id="deleteClassBtn" type="button" class="danger">학급과 학생 데이터 모두 삭제</button>
+      </section>
+
+      <section id="cards" class="hidden">
+        <h2 class="noprint">로그인 카드</h2>
+        <p id="cardNote" class="noprint"></p>
+        <div class="row noprint"><button id="printBtn" type="button">인쇄하기</button><button id="closeCards" type="button" class="light">닫기</button></div>
+        <div id="cardGrid"></div>
+      </section>
+    </div>
+
+    <!-- 관리자 -->
+    <div id="adminTab" class="hidden"><div id="adminView"></div></div>
+  </div>
+</main>
+
+<div id="deleteBox" class="overlay hidden"><div class="panel">
+  <h2>학급 전체 삭제</h2>
+  <p id="deleteHint"></p>
+  <input id="deleteCode" type="text" autocomplete="off" style="width:100%">
+  <div class="row end"><button id="deleteCancel" type="button" class="light">취소</button><button id="deleteConfirm" type="button" class="danger">모두 삭제</button></div>
+</div></div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm"
+} }
+</script>
+<script type="module" src="src/teacher/teacher.js"></script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+{
+  "artworks": [
+    {
+      "id": "sample-07", "type": "model", "slot": 1,
+      "title": "쌓기 탑", "artist": "한지우 (예시)", "grade": "6학년 2반",
+      "material": "나무 블록", "size": "높이 120 cm",
+      "description": "크기가 다른 나무 블록을 차례로 쌓아 올렸습니다. 스캔 파일이 옆으로 누워 있어서 rotation 값 [0, 0, 90] 으로 세운 예시입니다.",
+      "model": "sample-tower.glb", "sizeCm": { "height": 120 }, "rotation": [0, 0, 90]
+    },
+    {
+      "id": "sample-08", "type": "model", "slot": 2,
+      "title": "주둥이 넓은 화병", "artist": "오민준 (예시)", "grade": "5학년 1반",
+      "material": "지점토, 아크릴 물감", "size": "높이 45 cm",
+      "description": "지점토를 말아 올려 만든 화병입니다. 원본 파일은 크기가 매우 크고 원점에서 멀리 떨어져 있지만, sizeCm 의 높이 45cm 에 맞춰 자동으로 줄여서 받침대 가운데에 올립니다.",
+      "model": "sample-vase.glb", "sizeCm": { "height": 45 }
+    },
+    {
+      "id": "sample-09", "type": "model", "slot": 3,
+      "title": "고리", "artist": "", "grade": "4학년 3반",
+      "material": "철사, 종이죽", "size": "지름 40 cm",
+      "description": "철사로 뼈대를 만들고 종이죽을 붙여 만든 고리입니다. 높이 대신 가로(width) 40cm 를 기준으로 크기를 맞춘 예시입니다.",
+      "model": "sample-ring.glb", "sizeCm": { "width": 40 }
+    },
+    {
+      "id": "sample-10", "type": "splat", "slot": 4,
+      "title": "줄무늬 눈사람", "artist": "윤서아 (예시)", "grade": "3학년 1반",
+      "material": "스티로폼 공, 아크릴 물감", "size": "높이 60 cm",
+      "description": "스티로폼 공 두 개를 이어 붙이고 줄무늬를 칠했습니다. 스캔이 위아래가 뒤집혀 있어 rotation [180, 0, 0] 으로 바로 세우고, 원형(cylinder) 크롭으로 바닥과 옆의 상자를 잘라낸 예시입니다.",
+      "splat": "sample-snowman.ply", "thumbnail": "sample-snowman.svg",
+      "sizeCm": { "height": 60 }, "rotation": [180, 0, 0],
+      "crop": { "type": "cylinder", "center": [3, 2], "radius": 1.2, "yMin": -0.96 }
+    },
+    {
+      "id": "sample-11", "type": "splat", "slot": 5,
+      "title": "소용돌이 기둥", "artist": "임태양 (예시)", "grade": "6학년 4반",
+      "material": "찰흙", "size": "높이 90 cm",
+      "description": "찰흙을 비틀어 올려 만든 기둥입니다. 박스(box) 크롭으로 작품이 들어 있는 범위만 남긴 예시입니다.",
+      "splat": "sample-spiral.ply", "thumbnail": "sample-spiral.svg",
+      "sizeCm": { "height": 90 },
+      "crop": { "type": "box", "min": [-0.55, 0.01, -0.55], "max": [0.55, 1.6, 0.55] }
+    },
+    {
+      "id": "sample-12", "type": "splat", "slot": 6,
+      "title": "빨간 버섯", "artist": "", "grade": "2학년 2반",
+      "material": "지점토", "size": "높이 35 cm",
+      "description": "숲에서 본 버섯을 지점토로 만들었습니다. 스캔 원점에서 떨어진 곳에 있는 작품을 원형 크롭의 center 로 지정한 예시입니다.",
+      "splat": "sample-mushroom.ply", "thumbnail": "sample-mushroom.svg",
+      "sizeCm": { "height": 35 },
+      "crop": { "type": "cylinder", "center": [-1, 4], "radius": 0.3, "yMin": 0.305 }
+    }
+  ]
+}
