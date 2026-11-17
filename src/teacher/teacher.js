@@ -276,8 +276,8 @@ function renderCards(cards, note) {
     const card = el('div', 'card');
     card.append(el('div', 'cTop', `${current.school} ${current.name} (학급 코드 ${current.code})`), el('div', 'cName', `${c.no}번  ${c.name}`));
     const rows = el('dl');
-    // 학번 = 학년 + 반(두 자리) + 번호(두 자리). 학생은 학번과 PIN 만 적고 들어온다
-    const studentCode = c.code ?? `${current.grade}${String(current.class_no).padStart(2, '0')}${String(c.no).padStart(2, '0')}`;
+    // 학번 = 학년 + 반 + 번호(두 자리). 예: 2학년 3반 12번 → 2312. 학생은 학번과 비밀번호만 적고 들어온다
+    const studentCode = `${current.grade}${current.class_no}${String(c.no).padStart(2, '0')}`;
     for (const [k, v] of [['학번', studentCode], ['처음 비밀번호', c.pin]]) rows.append(el('dt', null, k), el('dd', k === '학번' ? null : 'pin', v));
     card.append(rows, el('div', 'cUrl', siteUrl), el('div', 'cTip', '로그인하면 비밀번호를 나만 아는 것으로 바꿔요 · 별명은 직접 정해요'));
     box.append(card);
