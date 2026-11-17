@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { buildWorkModel, REGIONS, PARTS } from './model.js';
 import { buildGeometry, downsample } from './mesher.js';
 import { createItems } from '../items.js';
+import { isMedal } from '../gift-kinds.js';
 
 export const AVATAR_HEIGHT = 1.5;                 // 캐릭터 키(m). 격자 높이가 달라도 이 키에 맞춘다
 export const LOD_DISTANCE = 10;                   // 카메라에서 이보다 멀면 단순화 모형으로 표시(m)
@@ -51,15 +52,16 @@ export class VoxelAvatar {
     // 선물 아이템(후광 · 날개 · 훈장 …): 몸 크기에 맞춰 얹는다. 가까이 있을 때만 보인다
     this.items = null;
     this.config = config;
-    const ids = config?.items ?? [], medals = this.medals ?? [];
-    if ((ids.length || medals.length) && bounds.head && bounds.torso) {
+    // this.medals = 선생님에게 받은 선물 전체 (훈장 + 꾸미기 아이템). 훈장은 가슴에, 아이템은 종류에 따라 몸 곳곳에
+    const ids = config?.items ?? [], gifts = this.medals ?? [], medals = gifts.filter(isMedal), gear = gifts.filter((g) => !isMedal(g));
+    if ((ids.length || gifts.length) && bounds.head && bounds.torso) {
       const h = bounds.head, tr = bounds.torso;
       const X = (v) => (v - center[0]) * s, Z = (v) => (v - center[2]) * s;
       this.items = createItems(ids, {
         headTop: (h.max[1] + 1) * s, headY: (h.min[1] + h.max[1] + 1) / 2 * s, headR: (h.max[0] + 1 - h.min[0]) / 2 * s, headBack: Z(h.max[2] + 1),
         shoulderY: (tr.max[1] + 1) * s, chestY: (tr.min[1] + (tr.max[1] + 1 - tr.min[1]) * 0.68) * s,
         chestFront: Z(tr.min[2]), back: Z(tr.max[2] + 1), torsoW: X(tr.max[0] + 1) - X(tr.min[0]),
-      }, medals);
+      }, medals, gear);
       rig.add(this.items);
     }
 

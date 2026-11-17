@@ -7,7 +7,7 @@ import { createPlayer } from './core/player.js';
 import { createFollowCamera } from './core/follow-camera.js';
 import { loadConfig, normalizeConfig, hasEdits } from './character/config.js';
 import { saveMyAvatar, loadMyAvatar, loadMyItems, loadMyMedals } from './data/avatars.js';
-import { cleanMedal, medalSvg } from './character/medal-shapes.js';
+import { cleanGift, giftSvg, isMedal } from './character/gift-kinds.js';
 import { itemName } from './character/item-list.js';
 import { joinRoom } from './net/room-sync.js';
 import { createEditor } from './character/editor.js';
@@ -268,13 +268,14 @@ ensureSession().then(() => currentAccount()).then((a) => { if (a.kind === 'teach
 
 // 받은 훈장: 가슴과 별명 옆에 보인다. 별명표를 누르면 훈장 이름이 나온다
 let myMedals = [];
-function setMedals(list) { myMedals = list ?? []; avatar.setMedals(myMedals); player.setMedals(myMedals); }
+// (myMedals 에는 훈장과 꾸미기 아이템이 함께 들어 있다. 별명 옆 표식은 훈장만, 이름 창에는 모두 나온다)
+function setMedals(list) { myMedals = list ?? []; avatar.setMedals(myMedals); player.setMedals(myMedals.filter(isMedal)); }
 function showMedalNames(name, medals) {
-  $('medalPopTitle').textContent = `${name} 님의 훈장`;
+  $('medalPopTitle').textContent = `${name} 님이 받은 선물`;
   const ul = $('medalPopList'); ul.replaceChildren();
   for (const raw of medals) {
-    const m = cleanMedal(raw), li = document.createElement('li'), label = document.createElement('span');
-    li.innerHTML = medalSvg(m); label.textContent = m.name; label.style.color = m.name_color; li.append(label); ul.append(li);
+    const m = cleanGift(raw), li = document.createElement('li'), label = document.createElement('span');
+    li.innerHTML = giftSvg(m); label.textContent = m.name; label.style.color = m.name_color; li.append(label); ul.append(li);
   }
   $('medalPop').classList.remove('hidden');
 }
@@ -286,7 +287,7 @@ const syncFromServer = (account) => Promise.all([loadMyAvatar(), loadMyItems(), 
   const newMedals = medals.filter((m) => !knownMedals.includes(m.id));
   try { localStorage.setItem('vmuseum.medalsSeen', JSON.stringify(medals.map((m) => m.id))); } catch { /* 무시 */ }
   setMedals(medals);
-  if (newMedals.length) setTimeout(() => notify(`선생님이 훈장을 주셨어요: ${newMedals.map((m) => m.name).join(', ')} 🏅`), 400);
+  if (newMedals.length) setTimeout(() => notify(`선생님이 선물을 주셨어요: ${newMedals.map((m) => m.name).join(', ')} 🎁`), 400);
   // 선물 아이템: 선생님이 준 것을 모두 착용한다 (거둬 간 것은 자동으로 빠짐)
   const worn = res ? [...(res.config.items ?? [])].sort().join() : null, items = [...owned].sort();
   config = normalizeConfig(res ? { ...res.config, nickname, items } : { ...config, nickname, items });

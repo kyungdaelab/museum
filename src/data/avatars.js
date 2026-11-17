@@ -47,12 +47,12 @@ export async function loadMyItems() {
   return error ? [] : data.map((r) => r.item_id);
 }
 
-// 로그인한 학생이 받은 훈장 목록 [{ id, name, shape, metal, ribbon, name_color }] (받은 순서대로. 학생이 아니면 빈 목록)
+// 로그인한 학생이 받은 선물(훈장 + 꾸미기 아이템) 목록 [{ id, name, kind, shape, metal, ribbon, name_color, effect }] (받은 순서대로. 학생이 아니면 빈 목록)
 export async function loadMyMedals() {
   const account = await currentAccount().catch(() => null);
   if (account?.kind !== 'student') return [];
   const client = await getClient();
-  const { data, error } = await client.from('student_medals').select('granted_at, medals(id, name, shape, metal, ribbon, name_color)').eq('student_id', account.id).order('granted_at');
+  const { data, error } = await client.from('student_medals').select('granted_at, medals(id, name, kind, shape, metal, ribbon, name_color, effect)').eq('student_id', account.id).order('granted_at');
   return error ? [] : data.map((r) => r.medals).filter(Boolean);
 }
 

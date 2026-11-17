@@ -48,7 +48,7 @@ async function fnError(error) {
 }
 const META = ['title', 'artist', 'grade', 'material', 'description', 'size_cm', 'adjust'];
 const pick = (src, keys) => Object.fromEntries(keys.filter((k) => src[k] !== undefined).map((k) => [k, src[k]]));
-const MEDAL_FIELDS = ['name', 'shape', 'metal', 'ribbon', 'name_color'];
+const MEDAL_FIELDS = ['name', 'kind', 'shape', 'metal', 'ribbon', 'name_color', 'effect'];      // 선물(훈장 · 꾸미기 아이템) 한 개의 값
 const ROOM_FIELDS = ['title', 'description', 'type', 'max_artworks', 'theme', 'visibility', 'starts_on', 'ends_on', 'guest_allowed', 'guest_avatar_mode', 'max_guests'];
 
 /* ───────────── 실제 서버 ───────────── */
@@ -96,7 +96,7 @@ async function serverApi() {
       else must(await db.from('student_items').delete().eq('student_id', studentId).eq('item_id', itemId));
     },
     // 훈장: 내가 만든 훈장 목록 / 만들기 · 고치기(id 가 있으면) / 지우기 / 학급 학생들이 받은 훈장 { 학생 id: [훈장 id] } / 주기 · 거두기
-    async listMedals() { return must(await db.from('medals').select('id, name, shape, metal, ribbon, name_color').eq('teacher_id', await myId()).order('created_at')); },
+    async listMedals() { return must(await db.from('medals').select('id, name, kind, shape, metal, ribbon, name_color, effect').eq('teacher_id', await myId()).order('created_at')); },
     async saveMedal(m) {
       const row = pick(m, MEDAL_FIELDS);
       return m.id ? must(await db.from('medals').update(row).eq('id', m.id).select().single()) : must(await db.from('medals').insert(row).select().single());
@@ -214,9 +214,9 @@ function demoApi() {
     async removeStudent(studentId) { students.splice(students.findIndex((x) => x.id === studentId), 1); },
     async listMedals() { return medals.map((m) => ({ ...m })); },
     async saveMedal(m) {
-      if (!String(m.name ?? '').trim()) throw new Error('훈장 이름을 적어 주세요');
+      if (!String(m.name ?? '').trim()) throw new Error('이름을 적어 주세요');
       if (m.id) { const old = medals.find((x) => x.id === m.id); Object.assign(old, pick(m, MEDAL_FIELDS)); return { ...old }; }
-      if (medals.length >= 40) throw new Error('훈장은 40개까지 만들 수 있습니다. 쓰지 않는 훈장을 지워 주세요');
+      if (medals.length >= 60) throw new Error('훈장과 아이템은 합쳐서 60개까지 만들 수 있습니다. 쓰지 않는 것을 지워 주세요');
       const made = { id: id(), ...pick(m, MEDAL_FIELDS) }; medals.push(made); return { ...made };
     },
     async deleteMedal(mid) { medals.splice(medals.findIndex((x) => x.id === mid), 1); for (const s of students) s.medals = (s.medals ?? []).filter((x) => x !== mid); },

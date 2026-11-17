@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { ITEM_IDS } from './item-list.js';
 import { medalPoints, cleanMedal, darker, MAX_MEDALS_ON_CHEST } from './medal-shapes.js';
+import { cleanGift, isMedal, MAX_GEAR } from './gift-kinds.js';
 
 // 재질은 모든 캐릭터가 함께 쓴다 (캐릭터 30명이 있어도 재질 수는 늘지 않음)
 const GOLD = new THREE.MeshBasicMaterial({ color: 0xffd35a });
@@ -132,14 +133,152 @@ function buildMedals(medals, b, ticks) {
   return g;
 }
 
-// ids: 착용한 선물 아이템 id 목록 (모르는 id 는 건너뜀),  medals: 받은 훈장 목록 [{ name, shape, metal, ribbon, name_color }]
-export function createItems(ids, body, medals = []) {
+/* ── 선생님이 만든 꾸미기 아이템 (종류 + 색 + 효과) ──
+   GEAR[종류](몸, 움직임 목록, 주 색, 둘째 색) → { node, at: [x, y, z] 효과가 붙는 자리, r: 효과 반지름 } */
+const softMaterials = new Map();          // 색 → 빛을 받는 재질 (스스로도 조금 빛나서 어두운 전시실에서도 잘 보임)
+const soft = (hex) => {
+  if (!softMaterials.has(hex)) { const c = new THREE.Color(hex); softMaterials.set(hex, new THREE.MeshLambertMaterial({ color: c, emissive: c.clone().multiplyScalar(0.35), side: THREE.DoubleSide })); }
+  return softMaterials.get(hex);
+};
+const glowMaterials = new Map();
+const glow = (hex) => { if (!glowMaterials.has(hex)) glowMaterials.set(hex, new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); return glowMaterials.get(hex); };
+
+const GEAR = {
+  halo(b, ticks, c1) {
+    const g = new THREE.Group(), r = b.headR * 0.62;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.03, 8, 28), flat(c1)), aura = new THREE.Mesh(new THREE.TorusGeometry(r, 0.075, 8, 28), glow(c1));
+    ring.rotation.x = aura.rotation.x = Math.PI / 2; g.add(ring, aura);
+    ticks.push((t) => { g.position.set(0, b.headTop + 0.17 + 0.025 * Math.sin(t * 2), 0); g.rotation.z = 0.06 * Math.sin(t * 1.3); });
+    return { node: g, at: [0, b.headTop + 0.17, 0], r: r * 1.2 };
+  },
+  wings(b, ticks, c1, c2) {
+    const g = new THREE.Group(), shape = new THREE.Shape(), tip = new THREE.Shape();
+    shape.moveTo(0, 0); shape.bezierCurveTo(0.1, 0.3, 0.42, 0.42, 0.5, 0.3);
+    shape.bezierCurveTo(0.44, 0.2, 0.46, 0.12, 0.4, 0.06); shape.bezierCurveTo(0.38, -0.02, 0.32, -0.06, 0.28, -0.12);
+    shape.bezierCurveTo(0.22, -0.2, 0.14, -0.22, 0.08, -0.26); shape.bezierCurveTo(0.03, -0.2, 0, -0.1, 0, 0);
+    tip.moveTo(0.3, 0.3); tip.bezierCurveTo(0.4, 0.38, 0.47, 0.36, 0.5, 0.3); tip.bezierCurveTo(0.44, 0.2, 0.46, 0.12, 0.4, 0.06); tip.bezierCurveTo(0.36, 0.14, 0.34, 0.22, 0.3, 0.3);
+    const sides = [];
+    for (const dir of [1, -1]) {
+      const wing = new THREE.Group(), feather = new THREE.Mesh(new THREE.ShapeGeometry(shape, 6), soft(c1)), edge = new THREE.Mesh(new THREE.ShapeGeometry(tip, 4), soft(c2));
+      edge.position.z = 0.004; wing.add(feather, edge);
+      wing.scale.x = dir; wing.position.set(dir * 0.04, b.shoulderY - 0.04, b.back + 0.03);
+      g.add(wing); sides.push([wing, dir]);
+    }
+    ticks.push((t) => { const f = 0.35 + 0.22 * Math.sin(t * 2.6); for (const [w, dir] of sides) w.rotation.y = dir * f; });
+    return { node: g, at: [0, b.shoulderY, b.back + 0.1], r: 0.42 };
+  },
+  crown(b, ticks, c1, c2) {
+    const g = new THREE.Group(), r = b.headR * 0.5;
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.07, 14, 1, true), flat(darker(c1, 0.85))); band.position.y = 0.035; g.add(band);
+    for (let i = 0; i < 5; i++) { const a = i * 2 * Math.PI / 5, spike = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.11, 4), flat(c1)); spike.position.set(r * Math.sin(a), 0.12, r * Math.cos(a)); g.add(spike); }
+    const gem = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), flat(c2)); gem.position.set(0, 0.04, -r - 0.005); g.add(gem);
+    g.position.set(0, b.headTop - 0.005, 0);
+    return { node: g, at: [0, b.headTop + 0.12, 0], r: r * 1.1 };
+  },
+  cape(b, ticks, c1) {
+    const w = b.torsoW * 1.25, h = Math.max(0.3, b.shoulderY - 0.16), geo = new THREE.PlaneGeometry(w, h, 1, 4); geo.translate(0, -h / 2, 0);
+    const cloth = new THREE.Mesh(geo, soft(c1)); cloth.position.set(0, b.shoulderY + 0.02, b.back + 0.025);
+    ticks.push((t) => { cloth.rotation.x = 0.16 + 0.07 * Math.sin(t * 2.1); });
+    return { node: cloth, at: [0, b.shoulderY - h / 2, b.back + 0.12], r: w * 0.6 };
+  },
+  star(b, ticks) {
+    const g = new THREE.Group(), a = sparkles(9, 0, 0, 0, 0.5, 21), c = sparkles(7, 0, 0, 0, 0.42, 33);
+    g.add(a, c); g.position.y = b.headY * 0.72;
+    ticks.push((t) => { a.rotation.y = t * 0.8; c.rotation.y = -t * 1.1; c.position.y = 0.12 * Math.sin(t * 1.4); });
+    return { node: g, at: [0, b.headY * 0.72, 0], r: 0 };          // 스스로 반짝이므로 효과를 더 붙이지 않음
+  },
+  // 동물 귀: 머리 위 양쪽에 쫑긋 (가끔 까딱거림)
+  ears(b, ticks, c1, c2) {
+    const g = new THREE.Group(), x = b.headR * 0.56, pair = [];
+    for (const dir of [1, -1]) {
+      const ear = new THREE.Group(), outer = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.2, 4), soft(c1)), inner = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.13, 3), flat(c2));
+      outer.position.y = 0.1; outer.rotation.y = Math.PI / 4; outer.scale.z = 0.55;
+      inner.position.set(0, 0.085, -0.036); inner.rotation.y = Math.PI; inner.scale.z = 0.3;
+      ear.add(outer, inner); ear.position.set(dir * x, b.headTop - 0.03, 0); ear.rotation.z = -dir * 0.22;
+      g.add(ear); pair.push([ear, dir]);
+    }
+    ticks.push((t) => { const k = Math.max(0, Math.sin(t * 0.9)) ** 8; for (const [e, dir] of pair) e.rotation.z = -dir * (0.22 + 0.3 * k); });
+    return { node: g, at: [0, b.headTop + 0.12, 0], r: b.headR * 0.9 };
+  },
+  // 머리 리본: 머리 위 옆쪽의 큰 리본
+  bow(b, ticks, c1, c2) {
+    const g = new THREE.Group(), tri = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.17, 0.1), new THREE.Vector2(0.17, -0.1)]);
+    for (const dir of [1, -1]) { const loop = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: 0.05, bevelEnabled: false }), soft(c1)); loop.scale.x = dir; loop.position.z = -0.025; g.add(loop); }
+    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), flat(c2)); g.add(knot);
+    g.position.set(b.headR * 0.5, b.headTop + 0.055, -b.headR * 0.15); g.rotation.z = -0.28;
+    ticks.push((t) => { g.scale.setScalar(1 + 0.04 * Math.sin(t * 3)); });
+    return { node: g, at: [b.headR * 0.5, b.headTop + 0.07, -b.headR * 0.15], r: 0.2 };
+  },
+  // 목도리: 목을 두르고 앞으로 한 가닥 늘어뜨림 (줄무늬)
+  scarf(b, ticks, c1, c2) {
+    const g = new THREE.Group(), r = b.torsoW * 0.5;
+    const wrap = new THREE.Mesh(new THREE.TorusGeometry(r, 0.055, 8, 20), soft(c1)); wrap.rotation.x = Math.PI / 2; wrap.scale.set(1, (b.back - b.chestFront) / (2 * r) * 1.15, 1);
+    wrap.position.set(0, b.shoulderY + 0.015, (b.back + b.chestFront) / 2);
+    const tail = new THREE.Group(), cloth = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.2, 0.028), soft(c1)); cloth.position.y = -0.1;
+    tail.add(cloth);
+    for (const y of [-0.1, -0.16]) { const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.094, 0.022, 0.032), flat(c2)); stripe.position.y = y; tail.add(stripe); }
+    tail.position.set(b.torsoW * 0.2, b.shoulderY + 0.02, b.chestFront - 0.03);
+    g.add(wrap, tail);
+    ticks.push((t) => { tail.rotation.x = -0.08 + 0.07 * Math.sin(t * 2.3); });
+    return { node: g, at: [0, b.shoulderY, b.chestFront - 0.06], r: r * 1.3 };
+  },
+  // 풍선: 손에 묶인 줄 끝에서 머리 위로 둥실
+  balloon(b, ticks, c1) {
+    const g = new THREE.Group(), x = b.torsoW * 0.5 + 0.2, top = b.headTop + 0.5, hand = b.chestY - 0.12;
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), soft(c1)); ball.scale.y = 1.15;
+    const shine = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), flat('#ffffff')); shine.position.set(-0.07, 0.08, -0.13);
+    const knot = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.05, 6), flat(darker(c1))); knot.position.y = -0.21;
+    const len = top - 0.2 - hand, string = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, len, 4), flat('#8a8272')); string.position.y = -0.22 - len / 2;
+    g.add(ball, shine, knot, string);
+    ticks.push((t) => { g.position.set(x + 0.03 * Math.sin(t * 1.1), top + 0.035 * Math.sin(t * 1.7), 0.02 * Math.cos(t * 0.9)); g.rotation.z = 0.07 * Math.sin(t * 1.1); });
+    return { node: g, at: [x, top, 0], r: 0.26 };
+  },
+  // 꼬마 친구: 어깨 옆에서 날갯짓하며 따라다니는 작은 친구
+  pet(b, ticks, c1, c2) {
+    const g = new THREE.Group(), body = new THREE.Mesh(new THREE.SphereGeometry(0.085, 14, 10), soft(c1));
+    const beak = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.05, 4), flat(darker(c2, 0.9))); beak.rotation.x = -Math.PI / 2; beak.position.set(0, -0.005, -0.095);
+    g.add(body, beak);
+    for (const dir of [1, -1]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 5), flat('#2b2b2b')); eye.position.set(dir * 0.034, 0.025, -0.074); g.add(eye); }
+    const flaps = [];
+    for (const dir of [1, -1]) { const wing = new THREE.Mesh(new THREE.CircleGeometry(0.06, 10), soft(c2)); wing.scale.y = 0.6; wing.position.set(dir * 0.085, 0.01, 0.01); g.add(wing); flaps.push([wing, dir]); }
+    const cx = -(b.torsoW * 0.5 + 0.24), cy = b.headY + 0.05;
+    ticks.push((t) => {
+      g.position.set(cx + 0.07 * Math.sin(t * 1.3), cy + 0.06 * Math.sin(t * 2.4), 0.05 + 0.08 * Math.cos(t * 1.3));
+      g.rotation.y = 0.35 * Math.sin(t * 1.3);
+      const f = Math.sin(t * 16); for (const [w, dir] of flaps) w.rotation.y = dir * (0.5 + 0.7 * f);
+    });
+    return { node: g, at: [cx, cy, 0.05], r: 0.2 };
+  },
+};
+
+// 받은 아이템 목록 → 3D. 같은 종류는 처음 것 하나만, 모두 MAX_GEAR 개까지
+function buildGear(gear, b, ticks) {
+  const g = new THREE.Group(), seen = new Set();
+  for (const raw of gear) {
+    const it = cleanGift(raw);
+    if (it.kind === 'medal' || !GEAR[it.kind] || seen.has(it.kind) || seen.size >= MAX_GEAR) continue;
+    seen.add(it.kind);
+    const { node, at, r } = GEAR[it.kind](b, ticks, it.metal, it.ribbon);
+    node.name = 'gear:' + it.kind; g.add(node);
+    if (r > 0 && it.effect !== 'none') {                // 효과: 반짝이 = 별빛이 천천히 돌며 반짝 / 깜빡이 = 별빛과 아이템이 깜빡깜빡
+      const sp = sparkles(it.effect === 'blink' ? 7 : 5, at[0], at[1], at[2], r, seen.size * 7 + 3); g.add(sp);
+      const phase = seen.size * 1.7;
+      if (it.effect === 'blink') ticks.push((t) => { const on = Math.sin(t * 7 + phase) > -0.2; sp.visible = on; sp.rotation.y = t * 2.2; node.scale.setScalar(on ? 1.05 : 0.97); });
+      else ticks.push((t) => { sp.rotation.y = t * 0.9 + phase; sp.position.y = at[1] + 0.03 * Math.sin(t * 1.5 + phase); });
+    }
+  }
+  return g;
+}
+
+// ids: 착용한 선물 아이템 id 목록 (모르는 id 는 건너뜀),  medals: 받은 훈장 목록,  gear: 받은 꾸미기 아이템 목록
+export function createItems(ids, body, medals = [], gear = []) {
   const group = new THREE.Group(), ticks = [];
   for (const id of ITEM_IDS) {                       // 목록 순서대로 (같은 아이템을 두 번 달지 않음)
     if (!ids?.includes(id) || !BUILDERS[id]) continue;
     const node = BUILDERS[id](body, ticks); node.name = 'item:' + id; group.add(node);
   }
   if (medals.length) { const node = buildMedals(medals, body, ticks); node.name = 'medals'; group.add(node); }
+  if (gear.length) { const node = buildGear(gear, body, ticks); node.name = 'gear'; group.add(node); }
   group.userData.tick = (t) => {
     for (const f of ticks) f(t);
     if (sparkMaterial) sparkMaterial.size = 0.1 + 0.05 * Math.abs(Math.sin(t * 3.1));      // 다 같이 반짝반짝
