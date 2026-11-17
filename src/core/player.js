@@ -51,16 +51,29 @@ export function createPlayer(scene, avatar) {
   group.visible = false;
   scene.add(group);
   const vel = new THREE.Vector2();          // (x, z) 속도
+  // 점프: 캐릭터와 이름표만 위로 올린다 (그림자 · 충돌 · 카메라 기준은 바닥에 그대로)
+  const JUMP_SPEED = 5.4, GRAVITY = 15, TAG_Y = nameTag.position.y;      // 약 0.97m 높이, 0.72초
+  let jumpY = 0, jumpV = 0, jumps = 0;
+  const applyJump = () => { avatar.group.position.y = jumpY; nameTag.position.y = TAG_Y + jumpY; avatar.air = Math.min(1, jumpY / 0.25); };
 
   return {
     group, nameTag, vel,
+    get height() { return jumpY; },           // 지금 발이 떠 있는 높이(m)
+    get jumps() { return jumps; },            // 지금까지 뛴 횟수 (게임 · 멀티플레이에서 사용)
+    jump() { if (jumpY > 0 || jumpV > 0) return false; jumpV = JUMP_SPEED; jumps++; return true; },
     get position() { return group.position; },
     get speed() { return vel.length(); },
-    setName: tag.set,
-    teleport(x, z, yaw = 0) { group.position.set(x, 0, z); group.rotation.y = yaw; vel.set(0, 0); },
+    setName: (name) => tag.set(name),
+    setMedals: (medals) => tag.set(undefined, medals),      // 별명 옆에 훈장 표식
+    teleport(x, z, yaw = 0) { group.position.set(x, 0, z); group.rotation.y = yaw; vel.set(0, 0); jumpY = jumpV = 0; applyJump(); },
     stop() { vel.set(0, 0); },
     // axis = 입력(x, y, run), yaw = 카메라가 보는 방향, world = 충돌 대상
     update(dt, axis, yaw, world) {
+      if (jumpY > 0 || jumpV > 0) {             // 공중: 중력으로 내려옴
+        jumpY += jumpV * dt; jumpV -= GRAVITY * dt;
+        if (jumpY <= 0) jumpY = jumpV = 0;
+        applyJump();
+      }
       let ix = axis.x, iy = axis.y, mag = Math.hypot(ix, iy);
       if (mag > 1) { ix /= mag; iy /= mag; mag = 1; }
       if (mag < 0.12) { ix = iy = mag = 0; }

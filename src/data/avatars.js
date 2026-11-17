@@ -38,6 +38,24 @@ export async function loadMyAvatar() {
   catch { return null; }
 }
 
+// 로그인한 학생이 선생님에게 받은 선물 아이템 id 목록 (학생이 아니거나 읽지 못하면 빈 목록)
+export async function loadMyItems() {
+  const account = await currentAccount().catch(() => null);
+  if (account?.kind !== 'student') return [];
+  const client = await getClient();
+  const { data, error } = await client.from('student_items').select('item_id').eq('student_id', account.id);
+  return error ? [] : data.map((r) => r.item_id);
+}
+
+// 로그인한 학생이 받은 훈장 목록 [{ id, name, shape, metal, ribbon, name_color }] (받은 순서대로. 학생이 아니면 빈 목록)
+export async function loadMyMedals() {
+  const account = await currentAccount().catch(() => null);
+  if (account?.kind !== 'student') return [];
+  const client = await getClient();
+  const { data, error } = await client.from('student_medals').select('granted_at, medals(id, name, shape, metal, ribbon, name_color)').eq('student_id', account.id).order('granted_at');
+  return error ? [] : data.map((r) => r.medals).filter(Boolean);
+}
+
 // 다른 학생의 캐릭터 (멀티플레이에서 입장할 때 한 번만 받음). 같은 학생·같은 수정 시각이면 다시 받지 않는다
 const cache = new Map();
 export function fetchAvatar(studentId, version = '') {

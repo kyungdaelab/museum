@@ -111,11 +111,12 @@ export function createRoomsUi({ api, onManage }) {
         body.replaceChildren();
         if (step === 0) {            // ① 유형: 예시 평면도와 함께
           const grid = el('div', 'typeGrid');
-          for (const [type, text] of [['flat', '그림 · 사진처럼 벽에 거는 작품. 벽을 따라 한 바퀴 도는 갤러리'], ['sculpture', 'GLB 모델 · 3D 스캔(스플랫)처럼 받침대에 올리는 작품. 넓은 홀']]) {
+          for (const [type, text] of [['flat', '그림 · 사진처럼 벽에 거는 작품. 벽을 따라 한 바퀴 도는 갤러리'], ['sculpture', 'GLB 모델 · 3D 스캔(스플랫)처럼 받침대에 올리는 작품. 넓은 홀'],
+            ['mixed', '벽에는 그림, 가운데에는 입체 작품. 평면과 입체 작품 수를 따로 정할 수 있어요']]) {
             const b = el('button', 'typeCard' + (d.type === type ? ' sel' : '')); b.type = 'button';
-            const example = buildPlan(layoutOf({ type, max_artworks: 10, theme: {} })); example.classList.add('preview');
+            const example = buildPlan(layoutOf({ type, max_artworks: 10, theme: { flatCount: 6 } })); example.classList.add('preview');
             b.append(el('b', null, TYPE_LABEL[type]), example, el('span', 'muted', text));
-            b.addEventListener('click', () => { d.type = type; draw(); });
+            b.addEventListener('click', () => { d.type = type; if (type === 'mixed') d.theme.flatCount ??= Math.ceil(d.max_artworks / 2); else delete d.theme.flatCount; draw(); });
             grid.append(b);
           }
           body.append(grid, el('p', 'muted', '유형은 나중에 바꿀 수 없습니다. (작품이 하나도 없을 때만 바꿀 수 있어요)'));
@@ -126,6 +127,22 @@ export function createRoomsUi({ api, onManage }) {
           from.addEventListener('input', () => { d.starts_on = from.value; }); to.addEventListener('input', () => { d.ends_on = to.value; });
           const dates = el('div', 'row'); dates.append(field('시작하는 날', from), field('끝나는 날', to));
           body.append(field('전시 제목', title, 'f wide'), field('설명', desc, 'f wide'), dates, el('p', 'muted', '기간은 입구 안내판에 표시됩니다. 기간이 지나도 자동으로 닫히지는 않습니다.'));
+        } else if (step === 2 && d.type === 'mixed') {     // ③ 혼합형: 평면 · 입체 작품 수를 따로 (합쳐서 30점까지)
+          let flat = Math.min(29, Math.max(1, Math.round(d.theme.flatCount ?? Math.ceil(d.max_artworks / 2)))), solid = Math.min(30 - flat, Math.max(1, d.max_artworks - flat));
+          const rf = input('range', flat, { min: 1, max: 29, step: 1 }), rs = input('range', solid, { min: 1, max: 29, step: 1 });
+          const of_ = el('b', 'big'), os = el('b', 'big'), info = el('p', 'muted'), holder = el('div');
+          const update = (changed) => {
+            flat = +rf.value; solid = +rs.value;
+            if (flat + solid > 30) { if (changed === 'flat') { solid = 30 - flat; rs.value = solid; } else { flat = 30 - solid; rf.value = flat; } }      // 합이 30을 넘으면 다른 쪽을 줄임
+            d.max_artworks = flat + solid; d.theme.flatCount = flat;
+            of_.textContent = `${flat}점`; os.textContent = `${solid}점`;
+            const l = layoutOf({ type: d.type, max_artworks: d.max_artworks, theme: d.theme });
+            info.textContent = `모두 ${d.max_artworks}점 · 공간 크기 ${l.width.toFixed(1)} × ${l.depth.toFixed(1)}m · 1~${flat}번은 벽 자리(그림), ${flat + 1}~${d.max_artworks}번은 받침대 자리(입체)`;
+            holder.replaceChildren(plan());
+          };
+          rf.addEventListener('input', () => update('flat')); rs.addEventListener('input', () => update('solid')); update();
+          const r1 = el('div', 'row'), r2 = el('div', 'row'); r1.append(el('span', null, '평면 작품 (벽)'), rf, of_); r2.append(el('span', null, '입체 작품 (받침대)'), rs, os);
+          body.append(el('p', null, '벽에 걸 그림 수와 받침대에 올릴 입체 작품 수를 각각 정하세요. 합쳐서 30점까지이고, 나중에 늘리거나 줄일 수 있어요.'), r1, r2, info, holder);
         } else if (step === 2) {     // ③ 최대 작품 수
           const range = input('range', d.max_artworks, { min: 1, max: 30, step: 1 }), out = el('b', 'big'), info = el('p', 'muted'), holder = el('div');
           const update = () => {
@@ -141,7 +158,7 @@ export function createRoomsUi({ api, onManage }) {
           const row = el('div', 'row'), holder = el('div');
           const bind = (label, table, key) => { const s = select(table, d.theme[key]); s.addEventListener('change', () => { d.theme[key] = s.value; holder.replaceChildren(plan()); }); row.append(field(label, s)); };
           bind('벽 색', WALLS, 'wall'); bind('바닥', FLOORS, 'floor'); bind('조명 밝기', BRIGHTNESS, 'brightness');
-          if (d.type === 'sculpture') bind('받침대 배치', { grid: '격자', circle: '원형' }, 'arrangement');
+          if (d.type === 'sculpture' || d.type === 'mixed') bind('받침대 배치', { grid: '격자', circle: '원형' }, 'arrangement');
           holder.append(plan());
           body.append(row, el('p', 'muted', '색과 밝기는 전시실에 들어가서 확인할 수 있고, 언제든 바꿀 수 있습니다.'), holder);
         } else {                      // ⑤ 공개 범위 · 입장 코드

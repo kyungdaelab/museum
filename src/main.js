@@ -6,7 +6,9 @@ import { createInput } from './core/input.js';
 import { createPlayer } from './core/player.js';
 import { createFollowCamera } from './core/follow-camera.js';
 import { loadConfig, normalizeConfig, hasEdits } from './character/config.js';
-import { saveMyAvatar, loadMyAvatar } from './data/avatars.js';
+import { saveMyAvatar, loadMyAvatar, loadMyItems, loadMyMedals } from './data/avatars.js';
+import { cleanMedal, medalSvg } from './character/medal-shapes.js';
+import { itemName } from './character/item-list.js';
 import { joinRoom } from './net/room-sync.js';
 import { createEditor } from './character/editor.js';
 import { createCrowd } from './character/crowd.js';
@@ -64,13 +66,14 @@ const helpEl = $('help');
 let touchUI = false, helpTimer = 0;
 const setHelp = () => {
   helpEl.innerHTML = touchUI
-    ? '<b>조이스틱</b> 이동 (끝까지 밀면 달리기)<br><b>화면 드래그</b> 시점 회전<br><b>두 손가락</b> 줌'
-    : '<b>WASD / 방향키</b> 이동 · <b>Shift</b> 달리기<br><b>마우스 드래그</b> 시점 회전 · <b>휠</b> 줌';
+    ? '<b>조이스틱</b> 이동 (끝까지 밀면 달리기) · <b>점프 버튼</b><br><b>화면 드래그</b> 시점 회전<br><b>두 손가락</b> 줌'
+    : '<b>WASD / 방향키</b> 이동 · <b>Shift</b> 달리기 · <b>Space</b> 점프<br><b>마우스 드래그</b> 시점 회전 · <b>휠</b> 줌';
 };
 const enableTouchUI = () => { if (touchUI) return; touchUI = true; $('stick').classList.add('on'); setHelp(); };
 setHelp();
 if (matchMedia('(pointer: coarse)').matches || params.has('touch')) enableTouchUI();
 
+const tagRay = new THREE.Raycaster();
 const input = createInput({
   canvas, stickEl: $('stick'), knobEl: $('knob'),
   isBlocked: uiBlocked,
@@ -78,10 +81,15 @@ const input = createInput({
   onLook: (dx, dy, touch) => { if (!uiBlocked()) follow.look(dx, dy, touch); },
   onZoom: (f) => { if (!uiBlocked()) follow.zoom(f); },
   onTouch: enableTouchUI,
+  onJump: () => { if (state === 'room' && viewer.mode === 'off') player.jump(); },
   onActivity: () => { if (!helpTimer) helpTimer = setTimeout(() => helpEl.classList.add('hidden'), 4000); },
   onTap: (x, y) => {                  // 화면에서 작품을 직접 클릭/탭 (8m 이내)
     if (uiBlocked()) return;
     const ndc = new THREE.Vector2(x / window.innerWidth * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+    if (myMedals.length && player.nameTag.visible) {      // 내 별명표(훈장 표식)를 눌렀으면 훈장 이름을 보여 준다
+      tagRay.setFromCamera(ndc, camera);
+      if (tagRay.intersectObject(player.nameTag).length) { input.clear(); showMedalNames(config.nickname, myMedals); return; }
+    }
     openArtwork(current.artworks.pick(ndc, camera, 8 + follow.cam.curDist));
   },
 });
@@ -240,7 +248,11 @@ const customizer = createEditor({       // 캐릭터 꾸미기 = 복셀 편집�
 // 학생이 로그인하면(또는 이미 로그인된 채로 접속하면): 서버에 저장된 캐릭터와 닉네임을 브라우저 것 대신 사용
 const studentLogin = createStudentLogin({
   onChange: async (student, resumed) => {
-    if (!student) return;                               // 로그아웃 → 게스트로 계속 (브라우저의 캐릭터 그대로)
+    if (!student) {                                     // 로그아웃 → 게스트로 계속 (브라우저의 캐릭터 그대로, 선물 아이템과 훈장만 벗음)
+      setMedals([]);
+      if (config.items?.length) { config = normalizeConfig({ ...config, items: [] }); avatar.setConfig(config); customizer.setConfig(config); saveMyAvatar(config); }
+      return;
+    }
     // 게스트로 꾸미던 캐릭터가 있으면, 방금 로그인했을 때 계정으로 옮길지 묻는다
     if (!resumed && hasEdits(config)
         && await ask('지금 캐릭터를 내 계정에 저장할까요?', '저장하기', '계정 캐릭터 쓰기', '저장하면 계정에 있던 캐릭터 대신 지금 꾸민 캐릭터를 쓰게 돼요.')) {
@@ -254,11 +266,38 @@ const studentLogin = createStudentLogin({
 // 게스트에게는 눈에 보이지 않는 임시 ID 를 준다. 교사로 로그인돼 있으면 서버에 저장된 교사 캐릭터를 쓴다
 ensureSession().then(() => currentAccount()).then((a) => { if (a.kind === 'teacher') syncFromServer({ nickname: '' }); }).catch(() => {});
 
-const syncFromServer = (account) => loadMyAvatar().then((res) => {
+// 받은 훈장: 가슴과 별명 옆에 보인다. 별명표를 누르면 훈장 이름이 나온다
+let myMedals = [];
+function setMedals(list) { myMedals = list ?? []; avatar.setMedals(myMedals); player.setMedals(myMedals); }
+function showMedalNames(name, medals) {
+  $('medalPopTitle').textContent = `${name} 님의 훈장`;
+  const ul = $('medalPopList'); ul.replaceChildren();
+  for (const raw of medals) {
+    const m = cleanMedal(raw), li = document.createElement('li'), label = document.createElement('span');
+    li.innerHTML = medalSvg(m); label.textContent = m.name; label.style.color = m.name_color; li.append(label); ul.append(li);
+  }
+  $('medalPop').classList.remove('hidden');
+}
+$('medalPopClose').addEventListener('click', () => $('medalPop').classList.add('hidden'));
+
+const syncFromServer = (account) => Promise.all([loadMyAvatar(), loadMyItems(), loadMyMedals()]).then(([res, owned, medals]) => {
   const nickname = account.nickname || config.nickname;
-  config = normalizeConfig(res ? { ...res.config, nickname } : { ...config, nickname });
+  let knownMedals = []; try { knownMedals = JSON.parse(localStorage.getItem('vmuseum.medalsSeen') ?? '[]'); } catch { /* 무시 */ }
+  const newMedals = medals.filter((m) => !knownMedals.includes(m.id));
+  try { localStorage.setItem('vmuseum.medalsSeen', JSON.stringify(medals.map((m) => m.id))); } catch { /* 무시 */ }
+  setMedals(medals);
+  if (newMedals.length) setTimeout(() => notify(`선생님이 훈장을 주셨어요: ${newMedals.map((m) => m.name).join(', ')} 🏅`), 400);
+  // 선물 아이템: 선생님이 준 것을 모두 착용한다 (거둬 간 것은 자동으로 빠짐)
+  const worn = res ? [...(res.config.items ?? [])].sort().join() : null, items = [...owned].sort();
+  config = normalizeConfig(res ? { ...res.config, nickname, items } : { ...config, nickname, items });
   avatar.setConfig(config); customizer.setConfig(config); player.setName(config.nickname);
-  if (!res) { saveMyAvatar(config); return; }           // 계정에 아직 캐릭터가 없으면 지금 것을 계정에 저장
+  // 새로 받은 선물이 있으면 한 번 알려 준다
+  let known = []; try { known = JSON.parse(localStorage.getItem('vmuseum.giftsSeen') ?? '[]'); } catch { /* 무시 */ }
+  const fresh = items.filter((id) => !known.includes(id));
+  if (fresh.length) notify(`선생님이 선물을 주셨어요: ${fresh.map(itemName).join(', ')} 🎁`);
+  try { localStorage.setItem('vmuseum.giftsSeen', JSON.stringify(items)); } catch { /* 무시 */ }
+  if (!res || worn !== items.join()) saveMyAvatar(config);          // 계정에 아직 캐릭터가 없거나 선물 목록이 달라졌으면 계정에 저장
+  if (!res) return;
   let seen = ''; try { seen = localStorage.getItem('vmuseum.resetSeen') ?? ''; } catch { /* 무시 */ }
   if (res.reset && res.reset.at !== seen) {         // 교사가 초기화했으면 사유를 한 번 알림
     showNotice([`선생님이 캐릭터에 붙인 픽셀과 칠한 색을 초기화했습니다. 사유: ${res.reset.reason}`]);
@@ -266,6 +305,7 @@ const syncFromServer = (account) => loadMyAvatar().then((res) => {
   }
 }).catch(() => {});
 $('exitBtn').addEventListener('click', exitToLobby);
+$('jumpBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); if (!uiBlocked() && viewer.mode === 'off') player.jump(); });
 $('editBtn').addEventListener('click', () => { if (uiBlocked()) return; input.clear(); player.stop(); customizer.open(); setState('customize'); });
 
 /* ── 매 프레임 ── */
@@ -321,6 +361,7 @@ customizer.open(); setState('customize');
 
 // 점검용: 브라우저 콘솔에서 __museum 으로 상태 확인
 window.__museum = {
+  setMedals, showMedalNames,
   engine, player, avatar, follow, viewer, panel, customizer, memory, enterRoom, exitToLobby,
   get current() { return current; }, get state() { return state; },
   step: (dt = 1 / 60) => { if (state === 'customize') customizer.render(dt); else if (state === 'room' && current) step(dt); },

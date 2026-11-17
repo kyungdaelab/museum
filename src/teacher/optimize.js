@@ -1,8 +1,8 @@
 // 올리기 전에 브라우저에서 하는 일: 파일 종류 · 크기 확인, 이미지 줄이기(WebP), 썸네일 만들기
 const MB = 1024 * 1024;
 export const LIMITS = { image: 3 * MB, model: 15 * MB, splat: 30 * MB };             // 서버 함수 storage-files 와 같은 값
-export const ACCEPT = { flat: '.jpg,.jpeg,.png,.webp', sculpture: '.glb,.spz,.ply' };   // 전시실 유형별로 고를 수 있는 파일
-export const ACCEPT_LABEL = { flat: 'JPG · PNG · WebP 그림', sculpture: 'GLB 모델 · SPZ/PLY 스플랫' };
+export const ACCEPT = { flat: '.jpg,.jpeg,.png,.webp', sculpture: '.glb,.spz,.ply', mixed: '.jpg,.jpeg,.png,.webp,.glb,.spz,.ply' };   // 전시실 유형별로 고를 수 있는 파일
+export const ACCEPT_LABEL = { flat: 'JPG · PNG · WebP 그림', sculpture: 'GLB 모델 · SPZ/PLY 스플랫', mixed: '그림(JPG · PNG · WebP)과 입체(GLB · SPZ/PLY)' };
 const EXT_KIND = { jpg: 'image', jpeg: 'image', png: 'image', webp: 'image', glb: 'model', spz: 'splat', ply: 'splat' };
 const IMAGE_SIDE = 2048, THUMB_SIDE = 360;
 

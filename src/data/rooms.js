@@ -11,7 +11,7 @@ async function getJson(url) {
 }
 
 // DB 의 유형 이름 ↔ 앱 안의 유형 이름 (DB: sculpture = 앱: solid)
-const TYPE_FROM_DB = { flat: 'flat', sculpture: 'solid' };
+const TYPE_FROM_DB = { flat: 'flat', sculpture: 'solid', mixed: 'mixed' };
 
 // DB 의 전시실 줄 → 앱에서 쓰는 전시실 설정
 function roomFromDb(r, teacherName = '') {
@@ -19,7 +19,7 @@ function roomFromDb(r, teacherName = '') {
     id: r.id, title: r.title, description: r.description, teacher: teacherName,
     period: r.starts_on || r.ends_on ? { start: r.starts_on ?? '', end: r.ends_on ?? '' } : null,
     type: TYPE_FROM_DB[r.type] ?? r.type, maxArtworks: r.max_artworks,
-    theme: r.theme ?? {}, arrangement: r.theme?.arrangement,
+    theme: r.theme ?? {}, arrangement: r.theme?.arrangement, flatCount: r.theme?.flatCount,      // flatCount = 혼합형에서 벽에 거는 작품 수
     visibility: r.visibility, hasEntryCode: r.has_entry_code, maxVisitors: r.max_visitors,
     // 게스트 설정 (멀티플레이에서 사용): 게스트 허용, 게스트 캐릭터 표시 방식('full' 꾸민 그대로 / 'base' 기본 모형 + 색만), 게스트 최대 인원
     guestAllowed: r.guest_allowed ?? true, guestAvatarMode: r.guest_avatar_mode ?? 'base', maxGuests: r.max_guests ?? 20,

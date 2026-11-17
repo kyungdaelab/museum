@@ -10,6 +10,9 @@ export function createInput(opts) {
   const { canvas, stickEl, knobEl } = opts;
   const keys = new Set();
   window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && !opts.isBlocked() && !e.target.closest?.('button, input, textarea, select')) {      // 스페이스 = 점프
+      e.preventDefault(); if (!e.repeat) { opts.onJump?.(); opts.onActivity?.(); } return;
+    }
     if (opts.isBlocked() || !MOVE_KEYS.includes(e.code)) return;
     keys.add(e.code); e.preventDefault(); opts.onActivity?.();
   });

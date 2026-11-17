@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { buildWorkModel, REGIONS, PARTS } from './model.js';
 import { buildGeometry, downsample } from './mesher.js';
+import { createItems } from '../items.js';
 
 export const AVATAR_HEIGHT = 1.5;                 // 캐릭터 키(m). 격자 높이가 달라도 이 키에 맞춘다
 export const LOD_DISTANCE = 10;                   // 카메라에서 이보다 멀면 단순화 모형으로 표시(m)
@@ -47,6 +48,21 @@ export class VoxelAvatar {
       rig.add(mesh); this.parts[name] = mesh;
       this.triangles.near += mesh.geometry.index.count / 3;
     }
+    // 선물 아이템(후광 · 날개 · 훈장 …): 몸 크기에 맞춰 얹는다. 가까이 있을 때만 보인다
+    this.items = null;
+    this.config = config;
+    const ids = config?.items ?? [], medals = this.medals ?? [];
+    if ((ids.length || medals.length) && bounds.head && bounds.torso) {
+      const h = bounds.head, tr = bounds.torso;
+      const X = (v) => (v - center[0]) * s, Z = (v) => (v - center[2]) * s;
+      this.items = createItems(ids, {
+        headTop: (h.max[1] + 1) * s, headY: (h.min[1] + h.max[1] + 1) / 2 * s, headR: (h.max[0] + 1 - h.min[0]) / 2 * s, headBack: Z(h.max[2] + 1),
+        shoulderY: (tr.max[1] + 1) * s, chestY: (tr.min[1] + (tr.max[1] + 1 - tr.min[1]) * 0.68) * s,
+        chestFront: Z(tr.min[2]), back: Z(tr.max[2] + 1), torsoW: X(tr.max[0] + 1) - X(tr.min[0]),
+      }, medals);
+      rig.add(this.items);
+    }
+
     // 멀리: 절반 해상도로 줄인 메시 하나 (팔다리는 움직이지 않음)
     const low = downsample(model);
     this.lod = new THREE.Mesh(buildGeometry(low, { origin: [center[0] / 2, 0, center[2] / 2], scale: s * 2, colors }), this.material);
@@ -56,6 +72,9 @@ export class VoxelAvatar {
     this.setFar(this.far);
     this.update(0, 0);
   }
+
+  // 받은 훈장 목록을 바꾼다 (가슴에 다는 훈장을 다시 만든다)
+  setMedals(medals) { this.medals = medals ?? []; this.setConfig(this.config); }
 
   // 카메라와의 거리에 따라 가까이/멀리 모형 전환
   setFar(far) {
@@ -88,12 +107,22 @@ export class VoxelAvatar {
     this.rig.position.y = bob;
     this.rig.rotation.x = -(0.04 * mv + 0.16 * rn);                // 달릴수록 앞으로 숙임
     if (p.head) { p.head.rotation.x = 0.12 * rn; p.head.rotation.z = idle * 0.03 * Math.sin(t * 0.9) + mv * 0.03 * sw; }
+    // 점프 중(air: 0 = 땅, 1 = 공중): 두 팔을 번쩍 들고 다리를 살짝 모은다
+    const air = this.air ?? 0;
+    if (air > 0.01) {
+      if (p.armL) { p.armL.rotation.x += (-2.5 - p.armL.rotation.x) * air; p.armL.rotation.z = -0.25 * air; }
+      if (p.armR) { p.armR.rotation.x += (-2.5 - p.armR.rotation.x) * air; p.armR.rotation.z = 0.25 * air; }
+      if (p.legL) p.legL.rotation.x += (0.5 - p.legL.rotation.x) * air;
+      if (p.legR) p.legR.rotation.x += (-0.35 - p.legR.rotation.x) * air;
+    }
+    this.items?.userData.tick(t);
   }
 
   setOpacity(o) {                                  // 내 캐릭터 전용 (ownMaterial)
     if (!this.ownMaterial || o === this._opacity) return;
     this._opacity = o;
     this.group.visible = o > 0.02;
+    if (this.items) this.items.visible = o > 0.6;            // 카메라가 바짝 붙어 몸이 비쳐 보일 때는 아이템이 시야를 가리지 않게 숨김
     if (this.material.transparent !== o < 1) { this.material.transparent = o < 1; this.material.needsUpdate = true; }
     this.material.opacity = o;
   }

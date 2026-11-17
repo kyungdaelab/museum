@@ -1,6 +1,6 @@
 // 작품 등록: 여러 파일 한꺼번에 올리기(끌어다 놓기), CSV 로 정보 일괄 입력, 평면도에서 자리 배치, 입체 작품 크기 · 방향 보정
 import { $, el, button, field, input, run, message, dialog, confirmBox, show, mb, TYPE_LABEL } from './dom.js';
-import { buildPlan, layoutOf } from './plan.js';
+import { buildPlan, layoutOf, flatCountOf } from './plan.js';
 import { KIND_OF_TYPE } from './api.js';
 import { ACCEPT, ACCEPT_LABEL, LIMITS, kindOf, baseName, sizeProblem, optimizeImage, modelThumb, imageToThumb, parseArtworkCsv } from './optimize.js';
 import { fileUrl } from '../data/storage.js';
@@ -14,6 +14,8 @@ export function createArtworksUi({ api, onBack }) {
   let room = null, artworks = [], csv = { byFile: new Map(), inOrder: [] }, selected = null, busy = false;
   const view = $('artView');
   const thumbUrl = (a) => fileUrl(room.id, a.thumbnail_path || (a.kind === 'image' ? a.file_path : ''));
+  // 혼합형: 1 ~ flatCountOf(room) 번이 벽 자리 (혼합형이 아니면 null). 그 종류의 작품이 그 자리에 들어갈 수 있는가
+  const fits = (kind, no) => { const fc = flatCountOf(room); return fc == null || (kind === 'image') === (no <= fc); };
   const freeSlots = () => { const used = new Set(artworks.map((a) => a.slot)); return Array.from({ length: room.max_artworks }, (_, i) => i + 1).filter((n) => !used.has(n)); };
 
   async function reload() {
@@ -41,7 +43,10 @@ export function createArtworksUi({ api, onBack }) {
     drop.addEventListener('dragleave', () => drop.classList.remove('over'));
     drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); if (left > 0 && e.dataTransfer.files.length) upload([...e.dataTransfer.files]); });
     const add = button('작품 추가', '', () => pick.click()); add.disabled = left <= 0;
-    const limits = room.type === 'flat' ? '그림은 올릴 때 자동으로 긴 변 2048px · WebP 로 줄입니다 (줄인 뒤 3MB 까지)' : 'GLB 15MB, 스플랫(SPZ · PLY) 30MB 까지';
+    const flatCount = flatCountOf(room);
+    const limits = room.type === 'flat' ? '그림은 올릴 때 자동으로 긴 변 2048px · WebP 로 줄입니다 (줄인 뒤 3MB 까지)'
+      : room.type === 'mixed' ? `그림은 벽 자리(1~${flatCount}번), 입체 작품은 받침대 자리(${flatCount + 1}~${room.max_artworks}번)에 자동으로 들어갑니다 · 그림 3MB, GLB 15MB, 스플랫 30MB 까지`
+      : 'GLB 15MB, 스플랫(SPZ · PLY) 30MB 까지';
     const bar = el('div', 'row'); bar.append(add, el('span', 'muted', limits));
     view.append(drop, bar, csvBox(), el('div', 'queue', ''));
     view.querySelector('.queue').id = 'uploadQueue';
@@ -110,6 +115,8 @@ export function createArtworksUi({ api, onBack }) {
         const kind = kindOf(original);
         if (!kind || !allowed.includes(kind)) throw new Error(`${TYPE_LABEL[room.type]} 전시실에는 ${ACCEPT_LABEL[room.type]} 파일만 올릴 수 있어요`);
         if (!free.length) throw new Error('자리가 모두 찼어요. 작품을 지우거나 최대 작품 수를 늘려 주세요');
+        const at = free.findIndex((no) => fits(kind, no));      // 혼합형: 그림은 벽 자리, 입체는 받침대 자리 중 가장 앞 번호
+        if (at < 0) throw new Error(kind === 'image' ? '그림을 걸 벽 자리가 모두 찼어요. 전시실 설정에서 평면 작품 수를 늘려 주세요' : '입체 작품을 놓을 받침대 자리가 모두 찼어요. 전시실 설정에서 입체 작품 수를 늘려 주세요');
         let file = original, thumb = null, note = '';
         if (kind === 'image') { say(i, '크기 줄이는 중…'); ({ file, thumb, note } = await optimizeImage(original)); }
         const problem = sizeProblem(kind, file); if (problem) throw new Error(problem);
@@ -121,8 +128,8 @@ export function createArtworksUi({ api, onBack }) {
         const meta = { title: baseName(original.name), ...(csv.byFile.size ? csv.byFile.get(key) : csv.inOrder[i]) };
         if (!meta.title) meta.title = baseName(original.name);
         say(i, '올리는 중…');
-        await api.addArtwork(room, free[0], kind, meta, file, thumb);
-        free.shift(); usedBytes += bytes; ok++;
+        await api.addArtwork(room, free[at], kind, meta, file, thumb);
+        free.splice(at, 1); usedBytes += bytes; ok++;
         say(i, '완료' + (note ? ` · ${note}` : ''), 'ok');
       } catch (e) { say(i, e.message || '올리지 못했어요', 'bad'); }
     }

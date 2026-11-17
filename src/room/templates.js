@@ -93,12 +93,39 @@ function solidLayout(n, arrangement = 'grid') {
   });
 }
 
+/* ── 혼합형: 가운데에 입체 작품 받침대, 남·북 벽에 평면 작품 ──
+   자리 번호: 1 ~ flatCount 번은 벽 자리(북쪽 벽을 따라 안쪽으로 → 남쪽 벽을 따라 입구로), 그 뒤 번호는 받침대 자리.
+   홀 크기는 받침대 수로 정하고, 벽 길이가 그림 수에 모자라면 홀을 안쪽으로 늘린다(받침대는 가운데로 옮김). */
+export const mixedCounts = (cfg) => {
+  const total = clampCount(cfg.maxArtworks), raw = Math.round(Number(cfg.flatCount));
+  const flat = Math.min(total, Math.max(0, Number.isFinite(raw) ? raw : Math.ceil(total / 2)));
+  return { total, flat, solid: total - flat };
+};
+function mixedLayout(cfg) {
+  const SPACING = 2.6, { flat: nFlat, solid: nSolid } = mixedCounts(cfg);
+  const hall = solidLayout(nSolid, cfg.arrangement);
+  const north = Math.ceil(nFlat / 2), south = nFlat - north;
+  const need = north * SPACING + 1.2, extra = Math.max(0, need - hall.width);
+  const width = hall.width + extra, depth = hall.depth;
+  const slots = {}; let no = 1;
+  const along = (k, j) => (width - k * SPACING) / 2 + SPACING / 2 + j * SPACING;
+  for (let j = 0; j < north; j++) slots[no++] = wall(along(north, j), -depth + IN, 'S');
+  for (let j = south - 1; j >= 0; j--) slots[no++] = wall(along(south, j), -IN, 'N');
+  for (const s of Object.values(hall.slots)) slots[no++] = floor(s.x + extra / 2, s.z);
+  return entrance({
+    width, depth, slots, blocks: [], zones: [],
+    walls: [[0, 0, width, 0], [0, -depth, width, -depth], [0, 0, 0, -depth], [width, 0, width, -depth]],
+    panels: [{ x: width - IN, z: -depth / 2, dir: 'W' }],
+  });
+}
+
 export const ROOM_TYPES = {
   flat:  { label: '평면 전용', accepts: ['image'],          layout: (n) => flatLayout(n) },
   solid: { label: '입체 전용', accepts: ['model', 'splat'], layout: (n, cfg) => solidLayout(n, cfg.arrangement) },
+  mixed: { label: '혼합',      accepts: ['image', 'model', 'splat'], layout: (n, cfg) => mixedLayout(cfg) },
 };
 
-export const clampCount = (n) => Math.min(MAX_ARTWORKS, Math.max(1, Math.round(Number(n)) || 1));
+export function clampCount(n) { return Math.min(MAX_ARTWORKS, Math.max(1, Math.round(Number(n)) || 1)); }
 
 // 전시실 설정 → 틀. 모르는 유형이면 오류
 export function makeLayout(config) {

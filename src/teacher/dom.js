@@ -41,4 +41,4 @@ export function confirmBox(text, yesLabel = '확인', danger = true) {
 
 export const mb = (n) => (Math.round(Number(n) * 10) / 10).toLocaleString();
 export const VISIBILITY = { public: '공개', link: '링크 공유', class: '학급 전용', private: '비공개' };
-export const TYPE_LABEL = { flat: '평면 전용', sculpture: '입체 전용' };
+export const TYPE_LABEL = { flat: '평면 전용', sculpture: '입체 전용', mixed: '혼합 (평면 + 입체)' };

@@ -7,7 +7,9 @@
 import { backendEnabled, getClient } from '../data/backend.js';
 import { uploadArtwork, uploadFile, confirmUpload, deleteArtwork as removeArtworkFiles, deleteRoom as removeRoomFiles } from '../data/storage.js';
 
-export const KIND_OF_TYPE = { flat: ['image'], sculpture: ['model', 'splat'] };
+export const KIND_OF_TYPE = { flat: ['image'], sculpture: ['model', 'splat'], mixed: ['image', 'model', 'splat'] };
+// 선생님이 학생에게 줄 수 있는 선물 아이템 (모양은 src/character/items.js)
+export { ITEM_LIST } from '../character/item-list.js';
 
 // 학교 이름 앞 두 글자의 첫소리 → 알파벳 (DB 의 create_class 와 같은 규칙. 연습 모드에서 사용)
 export function schoolInitials(school) {
@@ -46,6 +48,7 @@ async function fnError(error) {
 }
 const META = ['title', 'artist', 'grade', 'material', 'description', 'size_cm', 'adjust'];
 const pick = (src, keys) => Object.fromEntries(keys.filter((k) => src[k] !== undefined).map((k) => [k, src[k]]));
+const MEDAL_FIELDS = ['name', 'shape', 'metal', 'ribbon', 'name_color'];
 const ROOM_FIELDS = ['title', 'description', 'type', 'max_artworks', 'theme', 'visibility', 'starts_on', 'ends_on', 'guest_allowed', 'guest_avatar_mode', 'max_guests'];
 
 /* ───────────── 실제 서버 ───────────── */
@@ -81,6 +84,32 @@ async function serverApi() {
       const status = must(await db.from('student_status').select('student_id, locked_until, pin_issued_at, must_change').eq('class_id', classId));
       const byId = new Map(status.map((s) => [s.student_id, s]));
       return students.map((s) => ({ id: s.id, no: s.student_no, name: s.name, nickname: s.nickname, lockedUntil: byId.get(s.id)?.locked_until ?? null, pinIssuedAt: byId.get(s.id)?.pin_issued_at ?? null, mustChange: !!byId.get(s.id)?.must_change }));
+    },
+    // 선물 아이템: 학급 학생들이 가진 아이템 { 학생 id: [아이템 id, …] } / 주기 · 거두기 (권한은 DB 가 확인: 담당 교사와 관리자만)
+    async listItems(classId) {
+      const ids = must(await db.from('students').select('id').eq('class_id', classId)).map((s) => s.id);
+      const rows = ids.length ? must(await db.from('student_items').select('student_id, item_id').in('student_id', ids)) : [];
+      const out = {}; for (const r of rows) (out[r.student_id] ??= []).push(r.item_id); return out;
+    },
+    async setItem(studentId, itemId, on) {
+      if (on) must(await db.from('student_items').upsert({ student_id: studentId, item_id: itemId, granted_by: await myId() }, { onConflict: 'student_id,item_id', ignoreDuplicates: true }));
+      else must(await db.from('student_items').delete().eq('student_id', studentId).eq('item_id', itemId));
+    },
+    // 훈장: 내가 만든 훈장 목록 / 만들기 · 고치기(id 가 있으면) / 지우기 / 학급 학생들이 받은 훈장 { 학생 id: [훈장 id] } / 주기 · 거두기
+    async listMedals() { return must(await db.from('medals').select('id, name, shape, metal, ribbon, name_color').eq('teacher_id', await myId()).order('created_at')); },
+    async saveMedal(m) {
+      const row = pick(m, MEDAL_FIELDS);
+      return m.id ? must(await db.from('medals').update(row).eq('id', m.id).select().single()) : must(await db.from('medals').insert(row).select().single());
+    },
+    async deleteMedal(id) { must(await db.from('medals').delete().eq('id', id)); },
+    async listStudentMedals(classId) {
+      const ids = must(await db.from('students').select('id').eq('class_id', classId)).map((s) => s.id);
+      const rows = ids.length ? must(await db.from('student_medals').select('student_id, medal_id').in('student_id', ids).order('granted_at')) : [];
+      const out = {}; for (const r of rows) (out[r.student_id] ??= []).push(r.medal_id); return out;
+    },
+    async setStudentMedal(studentId, medalId, on) {
+      if (on) must(await db.from('student_medals').upsert({ student_id: studentId, medal_id: medalId, granted_by: await myId() }, { onConflict: 'student_id,medal_id', ignoreDuplicates: true }));
+      else must(await db.from('student_medals').delete().eq('student_id', studentId).eq('medal_id', medalId));
     },
     // password = 선생님이 정하는 처음 비밀번호 (비우면 1234)
     async addStudents(classId, students, password) { return roster({ action: 'add', class_id: classId, students, password }); },
@@ -158,6 +187,7 @@ function demoApi() {
     { teacher_id: 't2', name: '김선생', school: '한빛초', role: 'teacher', approved: true, email: 'kim@example.com', created_at: '2026-11-05' },
     { teacher_id: 't3', name: '이선생', school: '바다초', role: 'teacher', approved: false, email: 'lee@example.com', created_at: '2026-11-12' },
   ];
+  const medals = [];
   const checkPw = (v) => { const p = String(v ?? '').trim() || '1234'; if (!/^\S{4,20}$/.test(p)) throw new Error('비밀번호는 빈칸 없이 4~20자로 정해 주세요'); return p; };
   const id = () => crypto.randomUUID();
   const usedMb = (roomId) => Math.round(artworks.filter((a) => a.room_id === roomId).reduce((s, a) => s + a.file_size, 0) / 1048576 * 100) / 100;
@@ -182,6 +212,18 @@ function demoApi() {
     },
     async reissuePin(studentId, password) { const p = checkPw(password), s = students.find((x) => x.id === studentId); s.pinIssuedAt = new Date().toISOString(); s.lockedUntil = null; s.mustChange = true; return { no: s.no, name: s.name, pin: p }; },
     async removeStudent(studentId) { students.splice(students.findIndex((x) => x.id === studentId), 1); },
+    async listMedals() { return medals.map((m) => ({ ...m })); },
+    async saveMedal(m) {
+      if (!String(m.name ?? '').trim()) throw new Error('훈장 이름을 적어 주세요');
+      if (m.id) { const old = medals.find((x) => x.id === m.id); Object.assign(old, pick(m, MEDAL_FIELDS)); return { ...old }; }
+      if (medals.length >= 40) throw new Error('훈장은 40개까지 만들 수 있습니다. 쓰지 않는 훈장을 지워 주세요');
+      const made = { id: id(), ...pick(m, MEDAL_FIELDS) }; medals.push(made); return { ...made };
+    },
+    async deleteMedal(mid) { medals.splice(medals.findIndex((x) => x.id === mid), 1); for (const s of students) s.medals = (s.medals ?? []).filter((x) => x !== mid); },
+    async listStudentMedals(classId) { return Object.fromEntries(students.filter((s) => s.classId === classId).map((s) => [s.id, [...(s.medals ?? [])]])); },
+    async setStudentMedal(studentId, medalId, on) { const s = students.find((x) => x.id === studentId); s.medals = (s.medals ?? []).filter((i) => i !== medalId); if (on) s.medals.push(medalId); },
+    async listItems(classId) { return Object.fromEntries(students.filter((s) => s.classId === classId).map((s) => [s.id, [...(s.items ?? [])]])); },
+    async setItem(studentId, itemId, on) { const s = students.find((x) => x.id === studentId); s.items = (s.items ?? []).filter((i) => i !== itemId); if (on) s.items.push(itemId); },
     async deleteClass(classId, confirm) {
       const c = classes.find((x) => x.id === classId);
       if (confirm !== c.code) throw new Error('확인을 위해 학급 코드를 정확히 입력해 주세요');
@@ -218,6 +260,7 @@ function demoApi() {
     async addArtwork(room, slot, kind, meta, file, thumb) {
       const r = rooms.find((x) => x.id === room.id), list = artworks.filter((a) => a.room_id === r.id);
       if (!KIND_OF_TYPE[r.type].includes(kind)) throw new Error(r.type === 'flat' ? '평면 전용 전시실에는 그림만 등록할 수 있습니다' : '입체 전용 전시실에는 입체 작품만 등록할 수 있습니다');
+      if (r.type === 'mixed' && (kind === 'image') !== (slot <= (r.theme?.flatCount ?? 0))) throw new Error(kind === 'image' ? '그림은 벽 자리에만 걸 수 있습니다' : '입체 작품은 받침대 자리에만 놓을 수 있습니다');
       if (list.length >= r.max_artworks) throw new Error(`이 전시실에는 작품을 ${r.max_artworks}개까지만 등록할 수 있습니다`);
       if (list.some((a) => a.slot === slot)) throw new Error(`${slot}번 자리에 이미 작품이 있습니다`);
       const size = file.size + (thumb?.size ?? 0);
@@ -227,7 +270,11 @@ function demoApi() {
       artworks.push(a); return a;
     },
     async updateArtwork(aid, patch) { const a = artworks.find((x) => x.id === aid); Object.assign(a, pick(patch, META)); return a; },
-    async moveArtwork(aid, slot) { const a = artworks.find((x) => x.id === aid), other = artworks.find((x) => x.room_id === a.room_id && x.slot === slot); if (other) other.slot = a.slot; a.slot = slot; },
+    async moveArtwork(aid, slot) {
+      const a0 = artworks.find((x) => x.id === aid), r0 = rooms.find((x) => x.id === a0.room_id), fc = r0.theme?.flatCount ?? 0;
+      if (r0.type === 'mixed' && (a0.slot <= fc) !== (slot <= fc)) throw new Error('그림은 벽 자리끼리, 입체 작품은 받침대 자리끼리만 옮길 수 있습니다');
+      const a = a0, other = artworks.find((x) => x.room_id === a.room_id && x.slot === slot); if (other) other.slot = a.slot; a.slot = slot;
+    },
     async removeArtwork(aid) { artworks.splice(artworks.findIndex((x) => x.id === aid), 1); },
 
     async getSettings() { return { ...settings }; },

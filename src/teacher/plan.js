@@ -1,12 +1,15 @@
 // 전시실 평면도: 벽과 자리(슬롯)를 그린다. 마법사의 예시 그림과 작품 자리 배치에 함께 쓴다.
-import { makeLayout } from '../room/templates.js';
+import { makeLayout, mixedCounts } from '../room/templates.js';
 import { el } from './dom.js';
 
 const DIR = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
 const SVG = 'http://www.w3.org/2000/svg';
 
 // DB 의 전시실 값 → 공간 틀 (DB 의 유형 'sculpture' = 앱 안의 'solid')
-export const layoutOf = (room) => makeLayout({ type: room.type === 'sculpture' ? 'solid' : 'flat', maxArtworks: room.max_artworks, arrangement: room.theme?.arrangement });
+const APP_TYPE = { flat: 'flat', sculpture: 'solid', mixed: 'mixed' };
+export const layoutOf = (room) => makeLayout({ type: APP_TYPE[room.type] ?? 'flat', maxArtworks: room.max_artworks, arrangement: room.theme?.arrangement, flatCount: room.theme?.flatCount });
+// 혼합형에서 벽 자리 수 (1 ~ 이 번호까지가 그림 자리, 그 뒤가 받침대 자리). 혼합형이 아니면 null
+export const flatCountOf = (room) => (room.type === 'mixed' ? mixedCounts({ maxArtworks: room.max_artworks, flatCount: room.theme?.flatCount }).flat : null);
 
 /* 평면도 요소 만들기.
    opts.slot(no, info) → 그 자리에 놓을 버튼 요소 (없으면 번호만 있는 점). info = { kind: 'wall' | 'floor' }
@@ -14,7 +17,8 @@ export const layoutOf = (room) => makeLayout({ type: room.type === 'sculpture' ?
 export function buildPlan(layout, opts = {}) {
   const { width, depth } = layout;
   const box = el('div', 'plan');
-  box.style.aspectRatio = `${width} / ${depth}`;
+  box.style.aspectRatio = `${width + 0.8} / ${depth + 0.8}`;
+  box.style.setProperty('--ratio', String((width + 0.8) / (depth + 0.8)));
   const svg = document.createElementNS(SVG, 'svg');
   svg.setAttribute('viewBox', `-0.4 ${-depth - 0.4} ${width + 0.8} ${depth + 0.8}`);
   const line = (x1, z1, x2, z2, cls) => { const l = document.createElementNS(SVG, 'line'); l.setAttribute('x1', x1); l.setAttribute('y1', z1); l.setAttribute('x2', x2); l.setAttribute('y2', z2); l.setAttribute('class', cls); svg.append(l); };
