@@ -2,6 +2,7 @@
 import { createApi, parseRoster, ITEM_LIST } from './api.js';
 import { MEDAL_SHAPES, SHAPE_KEYS, METALS } from '../character/medal-shapes.js';
 import { GIFT_KINDS, GIFT_KEYS, EFFECTS, newGift, giftSvg } from '../character/gift-kinds.js';
+import { downloadTemplate, fileToText } from './excel.js';
 import { $, el, show, message, run, confirmBox, dialog, button, field, input } from './dom.js';
 import { createRoomsUi } from './rooms-ui.js';
 import { createArtworksUi } from './artworks-ui.js';
@@ -251,7 +252,16 @@ function giftDialog(s, mine, mineMedals = []) {
 }
 
 /* ── 명단 등록 ── */
-$('rosterFile').addEventListener('change', async (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) { $('roster').value = await f.text(); preview(); } });
+// 명단 파일 올리기: 엑셀(.xlsx · .xls)과 CSV · TXT 모두 받는다. 읽은 내용은 아래 칸에 들어가므로 등록 전에 확인 · 수정할 수 있다
+$('rosterFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) run(null, async () => {
+  try { $('roster').value = await fileToText(f); } catch { throw new Error('파일을 읽지 못했습니다. 엑셀(.xlsx) 또는 CSV 파일인지 확인해 주세요'); }
+  const { rows } = preview();
+  if (!rows.length) message('파일에서 학생을 찾지 못했습니다. 첫 칸에 번호, 둘째 칸에 이름이 있는지 확인해 주세요', 'error');
+}); });
+$('rosterTemplate').addEventListener('click', () => run($('rosterTemplate'), async () => {
+  await downloadTemplate('학생명단-양식.xlsx', ['번호', '이름'], [[1, '김하늘'], [2, '이도윤'], [3, '박서연']], [8, 16]);
+  message('양식을 내려받았습니다. 예시 세 줄을 지우고 우리 반 명단을 적은 뒤 "엑셀 · CSV 파일 선택"으로 올려 주세요.');
+}));
 $('roster').addEventListener('input', preview);
 function preview() {
   const { rows, errors } = parseRoster($('roster').value);

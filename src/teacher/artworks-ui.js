@@ -1,6 +1,7 @@
 // 작품 등록: 여러 파일 한꺼번에 올리기(끌어다 놓기), CSV 로 정보 일괄 입력, 평면도에서 자리 배치, 입체 작품 크기 · 방향 보정
 import { $, el, button, field, input, run, message, dialog, confirmBox, show, mb, TYPE_LABEL } from './dom.js';
 import { buildPlan, layoutOf, flatCountOf } from './plan.js';
+import { downloadTemplate, fileToText } from './excel.js';
 import { KIND_OF_TYPE } from './api.js';
 import { ACCEPT, ACCEPT_LABEL, LIMITS, kindOf, baseName, sizeProblem, optimizeImage, modelThumb, imageToThumb, parseArtworkCsv } from './optimize.js';
 import { fileUrl } from '../data/storage.js';
@@ -81,10 +82,20 @@ export function createArtworksUi({ api, onBack }) {
   // CSV 로 제목 · 작가 · 설명 일괄 입력
   function csvBox() {
     const box = el('details', 'csv'), area = input('textarea', '', { rows: 4, placeholder: '파일, 제목, 작가, 학년/반, 재료, 설명\nsea.jpg, 노을 지는 바다, 박서연, 6학년 1반, 수채 물감, 여름 방학에 본 바다' });
-    const info = el('span', 'muted'), file = input('file', '', { accept: '.csv,.txt', hidden: true });
+    const info = el('span', 'muted'), file = input('file', '', { accept: '.xlsx,.xls,.csv,.txt', hidden: true });
     const read = () => { csv = parseArtworkCsv(area.value); info.textContent = csv.inOrder.length ? `${csv.inOrder.length}줄 읽음` + (csv.byFile.size ? ' (파일 이름으로 맞춤)' : ' (올리는 순서대로 맞춤)') : ''; };
     area.addEventListener('input', read);
-    file.addEventListener('change', async () => { const f = file.files[0]; file.value = ''; if (f) { area.value = await f.text(); read(); } });
+    // 엑셀(.xlsx · .xls)과 CSV · TXT 모두 받는다. 읽은 내용은 위 칸에 들어가므로 확인 · 수정할 수 있다
+    file.addEventListener('change', async () => {
+      const f = file.files[0]; file.value = ''; if (!f) return;
+      try { area.value = await fileToText(f); read(); if (!csv.inOrder.length) info.textContent = '파일에서 작품 정보를 찾지 못했습니다'; }
+      catch { info.textContent = '파일을 읽지 못했습니다. 엑셀(.xlsx) 또는 CSV 파일인지 확인해 주세요'; }
+    });
+    const template = button('엑셀 양식 받기', 'small light', (b) => run(b, async () => {
+      await downloadTemplate('작품정보-양식.xlsx', ['파일', '제목', '작가', '학년/반', '재료', '설명'],
+        [['sea.jpg', '노을 지는 바다', '박서연', '6학년 1반', '수채 물감', '여름 방학에 본 바다'], ['robot.glb', '재활용 로봇', '이도윤', '6학년 1반', '종이 상자', '']], [16, 22, 12, 12, 14, 40]);
+      info.textContent = '양식을 내려받았습니다. 예시 줄을 지우고 채운 뒤 "엑셀 · CSV 파일 선택"으로 올려 주세요.';
+    }));
     const apply = button('이미 올린 작품에 적용', 'small', (b) => run(b, async () => {
       let n = 0;
       for (const a of artworks) {
@@ -93,10 +104,10 @@ export function createArtworksUi({ api, onBack }) {
       }
       message(n ? `${n}개 작품에 정보를 적용했습니다.` : '맞는 작품을 찾지 못했습니다. CSV 의 파일 칸이 올린 파일 이름(또는 작품 제목)과 같아야 합니다.'); await reload();
     }));
-    const pickLabel = el('label', 'small link'); pickLabel.append('CSV 파일 선택', file);
-    const row = el('div', 'row'); row.append(pickLabel, apply, info);
-    box.append(el('summary', null, 'CSV 로 제목 · 작가 · 설명 한꺼번에 입력'),
-      el('p', 'muted', '엑셀에서 복사해 붙여 넣거나 CSV 파일을 고르세요. 열 순서: 파일, 제목, 작가, 학년/반, 재료, 설명. 먼저 여기에 넣어 두고 파일을 올리면 파일 이름이 같은 줄의 정보가 자동으로 들어갑니다. 파일 칸을 비우면 올리는 순서대로 들어갑니다.'), area, row);
+    const pickLabel = el('label', 'small link'); pickLabel.append('엑셀 · CSV 파일 선택', file);
+    const row = el('div', 'row'); row.append(template, pickLabel, apply, info);
+    box.append(el('summary', null, '엑셀 · CSV 로 제목 · 작가 · 설명 한꺼번에 입력'),
+      el('p', 'muted', '"엑셀 양식 받기"로 양식을 내려받아 채운 뒤 그 파일을 올리거나, 엑셀에서 복사해 붙여 넣으세요. 열 순서: 파일, 제목, 작가, 학년/반, 재료, 설명. 먼저 여기에 넣어 두고 파일을 올리면 파일 이름이 같은 줄의 정보가 자동으로 들어갑니다. 파일 칸을 비우면 올리는 순서대로 들어갑니다.'), area, row);
     return box;
   }
 
