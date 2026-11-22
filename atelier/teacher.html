@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#08090a">
+  <title>수업 아틀리에 · 교사용</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="teacher.html">수업 아틀리에<small>교사용</small></a>
+      <div class="who">
+        <a id="portalLink" class="btn ghost small" href="#">← 선생님 수업 공간</a>
+        <span id="who" class="who hidden"><span id="whoName" class="ellipsis"></span><button id="logout" class="btn ghost small" type="button">로그아웃</button></span>
+      </div>
+    </header>
+
+    <div id="demoBanner" class="banner hidden">연습 모드입니다. 여기서 한 일은 저장되지 않고, 새로 고치면 처음으로 돌아갑니다.</div>
+
+    <!-- 로그인 (가상미술관 교사 계정) -->
+    <div id="loginView" class="login hidden">
+      <h1>교사용</h1>
+      <p id="loginHint" class="muted">구글 계정으로 로그인합니다. 처음이면 로그인한 뒤 가입 신청을 하고 관리자의 승인을 받습니다.</p>
+      <button id="googleBtn" class="btn" type="button">구글 계정으로 로그인</button>
+      <a id="applyLink" class="btn ghost hidden" href="#" style="display:grid;place-items:center;text-decoration:none">가입 신청 · 승인 확인하러 가기</a>
+      <details>
+        <summary class="muted" style="cursor:pointer">예전에 이메일과 비밀번호로 가입한 선생님</summary>
+        <form id="loginForm" class="stack" style="margin-top:12px">
+          <label class="f">이메일<input id="email" type="email" autocomplete="username"></label>
+          <label class="f">비밀번호<input id="password" type="password" autocomplete="current-password"></label>
+          <button id="loginBtn" class="btn ghost" type="submit">로그인</button>
+        </form>
+      </details>
+    </div>
+
+    <div id="appView" class="hidden">
+      <div id="driveBanner" class="banner hidden">아직 구글 드라이브를 연결하지 않았습니다. 과제와 공지는 지금도 만들 수 있지만, 파일을 주고받으려면 <b>드라이브 연결</b> 탭에서 연결해 주세요.</div>
+      <nav class="tabs" id="tabs">
+        <button type="button" data-tab="assignments">과제</button>
+        <button type="button" data-tab="notices">공지</button>
+        <button type="button" data-tab="journal">훌륭한 실패</button>
+        <button type="button" data-tab="drive">드라이브 연결</button>
+      </nav>
+      <main id="view"></main>
+    </div>
+
+    <footer class="made">made by <b>경대쌤</b><br><a href="mailto:kyungdaelab@gmail.com">kyungdaelab@gmail.com</a></footer>
+  </div>
+
+  <script type="importmap">
+  { "imports": { "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm" } }
+  </script>
+  <script type="module" src="src/teacher.js"></script>
+</body>
+</html>

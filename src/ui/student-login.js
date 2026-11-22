@@ -1,73 +1,50 @@
-// 학생 로그인 창과 비밀번호 바꾸기 창 (전시실 목록 화면의 '학생 로그인' 버튼)
+// 미술관 안에서의 계정 표시. 로그인 자체는 '수업 공간'(포털)에서 구글로 한다.
+//   게스트            : 아무것도 보이지 않는다 (별명만 정하고 관람). 나가는 길은 '처음 화면'(미술관 정문)뿐
+//   학생 · 교사(로그인): 로비에 [← 수업 공간] 과 [별명 · 로그아웃] 이 보이고, 정문에도 수업 공간으로 가는 버튼이 생긴다
 import { backendEnabled } from '../data/backend.js';
-import { loginStudent, logoutStudent, currentStudent, changeStudentPassword, rememberStudent } from '../data/student-auth.js';
+import { logoutStudent, currentAccount, rememberStudent } from '../data/student-auth.js';
+import { PORTAL_URL } from '../data/portal.js';
 
 const $ = (id) => document.getElementById(id);
 
-// 로그인을 요구하는 창은 어디에서도 띄우지 않는다. 이 버튼을 직접 눌렀을 때만 창이 열린다.
-// onChange(student | null, resumed) : 로그인 · 로그아웃했을 때. resumed = 이미 로그인된 채로 접속한 경우
+// onChange(student | null, resumed) : 학생으로 로그인된 채 접속했을 때(resumed = true), 로그아웃했을 때(null)
 export function createStudentLogin({ onChange }) {
-  const btn = $('lobbyLogin'), pwBtn = $('lobbyPw'), box = $('loginBox'), msg = $('loginMsg'), pwBox = $('pwBox'), pwMsg = $('pwMsg');
+  const btn = $('lobbyLogin');
   let student = null;
-  // 서버에 연결되어 있을 때만 버튼을 보인다 (주소에 ?login 을 붙이면 연결 전에도 창 모양을 볼 수 있음)
-  if (!backendEnabled() && !new URLSearchParams(location.search).has('login')) return { get student() { return null; }, setNickname() {} };
-  btn.classList.remove('hidden');
+  if (!backendEnabled()) return { get student() { return null; }, setNickname() {} };
 
   // 화면에는 학번이나 이름이 아니라 별명만 보인다 (아직 별명이 없으면 '학생')
-  const render = () => {
-    btn.textContent = student ? `${student.nickname || '학생'} · 로그아웃` : '학생 로그인';
-    pwBtn.classList.toggle('hidden', !student);
+  const render = (label = null) => {
+    const text = student ? `${student.nickname || '학생'} · 로그아웃` : label;
+    btn.classList.toggle('hidden', !text);
+    if (text) btn.textContent = text;
   };
-  const close = () => { box.classList.add('hidden'); $('loginPin').value = ''; msg.textContent = ''; };
+  const showPortalLinks = (who) => {
+    for (const id of ['lobbyPortal', 'gateTeacher']) { const a = $(id); if (a) { a.href = PORTAL_URL; a.classList.remove('hidden'); } }
+    const title = $('gateEnterTitle'), hint = $('gateEnterHint');
+    if (title) { title.textContent = `${who}(으)로 들어가기`; hint.textContent = '내 캐릭터로 전시실에 들어가요'; }
+  };
+  const hidePortalLinks = () => {
+    for (const id of ['lobbyPortal', 'gateTeacher']) $(id)?.classList.add('hidden');
+    const title = $('gateEnterTitle'), hint = $('gateEnterHint');
+    if (title) { title.textContent = '관람객으로 들어가기'; hint.textContent = '별명을 정하고 전시실을 둘러봐요'; }
+  };
+
   btn.addEventListener('click', async () => {
-    if (!student) { box.classList.remove('hidden'); $('loginCode').focus(); return; }
-    await logoutStudent(); student = null; render(); onChange(null);
-  });
-  $('loginCancel').addEventListener('click', close);
-  box.addEventListener('click', (e) => { if (e.target === box) close(); });
-  $('loginForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const code = $('loginCode').value.replace(/\s/g, ''), pin = $('loginPin').value.trim(), classCode = $('loginClass').value.trim();
-    if (!/^\d{4,6}$/.test(code) || pin.length < 4) { msg.textContent = '학번(숫자)과 비밀번호를 적어 주세요'; return; }
-    $('loginSubmit').disabled = true; msg.textContent = '확인하는 중…';
-    const res = await loginStudent(code, pin, classCode);
-    $('loginSubmit').disabled = false;
-    if (res.needClass) { $('loginClassRow').classList.remove('hidden'); $('loginClass').focus(); }      // 같은 학번이 다른 학급에도 있을 때만 학급 코드를 묻는다
-    if (res.error) { msg.textContent = res.error; if (!res.needClass) $('loginPin').value = ''; return; }
-    student = res.student; close(); render(); onChange(student, false);       // false = 방금 로그인함
-    // 선생님이 정해 준 비밀번호를 아직 쓰고 있으면 바꾸라고 알려 준다 ('나중에'를 누르면 그냥 넘어감)
-    if (student.must_change) openPw('선생님이 정해 준 비밀번호예요. 나만 아는 비밀번호로 바꿔 주세요. (빈칸 없이 4~20자)', pin);
+    await logoutStudent();
+    const wasStudent = !!student; student = null; render(); hidePortalLinks();
+    if (wasStudent) onChange(null);
   });
 
-  /* ── 비밀번호 바꾸기 ── */
-  const closePw = () => { pwBox.classList.add('hidden'); for (const id of ['pwCurrent', 'pwNext', 'pwAgain']) $(id).value = ''; pwMsg.textContent = ''; };
-  function openPw(hint, current = '') {
-    $('pwHint').textContent = hint; pwBox.classList.remove('hidden');
-    $('pwCurrent').value = current; (current ? $('pwNext') : $('pwCurrent')).focus();
-  }
-  pwBtn.addEventListener('click', () => openPw('나만 아는 비밀번호로 바꿔요. (빈칸 없이 4~20자)'));
-  $('pwCancel').addEventListener('click', closePw);
-  pwBox.addEventListener('click', (e) => { if (e.target === pwBox) closePw(); });
-  $('pwForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const current = $('pwCurrent').value, next = $('pwNext').value, again = $('pwAgain').value;
-    if (!/^\S{4,20}$/.test(next)) { pwMsg.textContent = '새 비밀번호는 빈칸 없이 4~20자로 정해 주세요'; return; }
-    if (next !== again) { pwMsg.textContent = '새 비밀번호 두 칸이 서로 달라요'; return; }
-    if (next === current) { pwMsg.textContent = '지금 비밀번호와 다른 것으로 정해 주세요'; return; }
-    $('pwSubmit').disabled = true; pwMsg.textContent = '바꾸는 중…';
-    const res = await changeStudentPassword(current, next);
-    $('pwSubmit').disabled = false;
-    if (res.error) { pwMsg.textContent = res.error; return; }
-    if (student) student.must_change = false;
-    closePw(); pwBtn.textContent = '비밀번호를 바꿨어요 ✓'; setTimeout(() => { pwBtn.textContent = '비밀번호 바꾸기'; }, 2500);
-  });
+  // 이미 로그인된 채로 접속한 경우
+  currentAccount().then((a) => {
+    if (a.kind === 'student') { student = { id: a.id, nickname: a.nickname }; render(); showPortalLinks(a.nickname || '학생'); onChange(student, true); }
+    else if (a.kind === 'teacher') { render('선생님 · 로그아웃'); showPortalLinks(`${a.name || ''} 선생님`.trim()); }
+  }).catch(() => {});
 
-  // 이미 로그인된 채로 접속한 경우 (true = 이어서 접속)
-  currentStudent().then((s) => { student = s; render(); if (s) onChange(s, true); }).catch(() => {});
-  render();
   return {
     get student() { return student; },
     // 캐릭터 꾸미기에서 별명을 바꾸면 버튼의 별명도 바로 바꾼다
-    setNickname(name) { if (student && name) { student.nickname = name; rememberStudent(student); render(); } },
+    setNickname(name) { if (student && name) { student.nickname = name; rememberStudent(); render(); } },
   };
 }

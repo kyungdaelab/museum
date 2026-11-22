@@ -1,14 +1,14 @@
 // 교사용 관리 화면: 로그인 → [내 전시실] [학급 · 학생] [관리자] 탭
-import { createApi, parseRoster, ITEM_LIST } from './api.js';
+import { createApi, ITEM_LIST } from './api.js';
+import { PORTAL_URL } from '../data/portal.js';
 import { MEDAL_SHAPES, SHAPE_KEYS, METALS } from '../character/medal-shapes.js';
 import { GIFT_KINDS, GIFT_KEYS, EFFECTS, newGift, giftSvg } from '../character/gift-kinds.js';
-import { downloadTemplate, fileToText } from './excel.js';
 import { $, el, show, message, run, confirmBox, dialog, button, field, input } from './dom.js';
 import { createRoomsUi } from './rooms-ui.js';
 import { createArtworksUi } from './artworks-ui.js';
 import { createAdminUi } from './admin-ui.js';
 
-const siteUrl = location.origin + location.pathname.replace(/teacher\.html$/, '');
+$('portalLink').href = PORTAL_URL + 'teacher.html'; $('classesPortal').href = PORTAL_URL + 'teacher.html';
 const api = await createApi();
 let current = null;        // 지금 보고 있는 학급
 let myMedals = [];         // 내가 만든 훈장
@@ -31,8 +31,11 @@ function manageRoom(room) { show('roomsView', false); show('artView'); run(null,
 /* ── 로그인 ── */
 async function start() {
   const s = await api.session();
-  show('loginView', !s); show('appView', !!s);
-  if (!s) return;
+  // 구글로 로그인했지만 아직 교사 신청을 하지 않은 사람(profile 없음)에게는 신청 칸을 보여 준다
+  const needApply = !!s && !s.profile;
+  show('loginView', !s || needApply); show('appView', !!s && !needApply);
+  show('googleLogin', !s); show('emailLogin', !s); show('applyBox', needApply);
+  if (!s || needApply) { if (needApply && !$('tName').value) $('tName').value = s.googleName || ''; return; }
   $('who').textContent = `${s.profile?.name || s.email} 선생님` + (s.profile?.role === 'admin' ? ' (관리자)' : '');
   const approved = !!s.profile?.approved, admin = s.profile?.role === 'admin';
   show('pending', !approved); show('tabs', approved); show('tab-admin', admin);
@@ -42,21 +45,22 @@ async function start() {
   adminUi ??= createAdminUi({ api });
   openTab('rooms');
 }
+$('googleBtn').addEventListener('click', () => run($('googleBtn'), () => api.signInGoogle()));
 $('loginForm').addEventListener('submit', (e) => { e.preventDefault(); run($('loginBtn'), async () => { await api.signIn($('email').value.trim(), $('password').value); $('password').value = ''; await start(); }); });
 $('signupBtn').addEventListener('click', () => run($('signupBtn'), async () => {
   const name = $('tName').value.trim(), school = $('tSchool').value.trim();
-  if (!name || !$('email').value.trim() || $('password').value.length < 8) throw new Error('이름, 이메일, 8자 이상의 비밀번호를 적어 주세요');
-  await api.signUp($('email').value.trim(), $('password').value, name, school);
-  message('가입 신청이 접수되었습니다. 관리자가 승인하면 전시실을 만들 수 있습니다. (이메일 확인이 켜져 있으면 받은 메일의 링크를 먼저 눌러 주세요)');
+  if (!name) throw new Error('이름을 적어 주세요');
+  await api.applyTeacher(name, school);
+  message('가입 신청이 접수되었습니다. 관리자가 승인하면 전시실을 만들 수 있습니다.');
   await start();
 }));
-for (const id of ['logout', 'logout2']) $(id).addEventListener('click', () => run(null, async () => { await api.signOut(); current = null; await start(); }));
+for (const id of ['logout', 'logout2', 'applyLogout']) $(id).addEventListener('click', () => run(null, async () => { await api.signOut(); current = null; await start(); }));
 
 /* ── 학급 ── */
 async function loadClasses() {
   const list = await api.listClasses(), box = $('classList');
   box.replaceChildren();
-  if (!list.length) box.append(el('p', 'muted', '아직 학급이 없습니다. 아래에서 만들어 주세요.'));
+  if (!list.length) box.append(el('p', 'muted', '아직 학급이 없습니다. 수업 공간의 선생님 화면에서 학급을 만들어 주세요.'));
   for (const c of list) {
     const b = el('button', 'classCard' + (current?.id === c.id ? ' sel' : '')); b.type = 'button';
     b.append(el('b', null, `${c.school} ${c.name}`), el('span', 'code', c.code), el('span', 'muted', `학생 ${c.count}명`));
@@ -64,16 +68,9 @@ async function loadClasses() {
     box.append(b);
   }
 }
-$('classForm').addEventListener('submit', (e) => { e.preventDefault(); run($('classBtn'), async () => {
-  const school = $('cSchool').value.trim(), grade = +$('cGrade').value, no = +$('cNo').value;
-  if (!school || !(grade >= 1 && grade <= 12) || !(no >= 1 && no <= 40)) throw new Error('학교 이름, 학년(1~12), 반(1~40)을 적어 주세요');
-  const c = await api.createClass(school, grade, no);
-  message(`학급을 만들었습니다. 학급 코드: ${c.code}`);
-  await openClass({ ...c, count: 0 });
-}); });
 
 async function openClass(c) {
-  current = c; show('classDetail'); show('cards', false);
+  current = c; show('classDetail');
   $('classTitle').textContent = `${c.school} ${c.name}`; $('classCode').textContent = c.code;
   await loadClasses(); await loadStudents();
 }
@@ -84,27 +81,6 @@ async function loadStudents() {
   show('noStudents', !list.length);
   for (const s of list) {
     const tr = el('tr');
-    const locked = s.lockedUntil && new Date(s.lockedUntil) > new Date();
-    const reissue = el('button', 'small', '비밀번호 초기화'), remove = el('button', 'small danger', '삭제');
-    reissue.type = remove.type = 'button';
-    reissue.addEventListener('click', async () => {
-      // 새 비밀번호를 선생님이 정한다 (학생이 쓰던 비밀번호는 선생님도 볼 수 없다)
-      const pw = await dialog((panel, close) => {
-        const box = input('text', '1234', { maxLength: 20, autocomplete: 'off' }), row = el('div', 'row end');
-        row.append(button('취소', 'light', () => close(null)), button('초기화', '', () => close(box.value.trim() || '1234')));
-        panel.append(el('h2', null, '비밀번호 초기화'), el('p', 'pre', `${s.no}번 ${s.name} 학생의 비밀번호를 아래 값으로 바꿉니다.\n쓰던 비밀번호는 더 이상 쓸 수 없고, 잠겨 있었다면 함께 풀립니다.\n학생이 로그인하면 스스로 다시 바꾸도록 안내가 나옵니다.`), field('새 비밀번호 (빈칸 없이 4~20자)', box), row);
-        box.select();
-      });
-      if (!pw) return;
-      await run(reissue, async () => {
-        const card = await api.reissuePin(s.id, pw);
-        renderCards([card], `${s.no}번 ${s.name} 의 비밀번호를 초기화했습니다.`); await loadStudents();
-      });
-    });
-    remove.addEventListener('click', async () => {
-      if (!await confirmBox(`${s.no}번 ${s.name} 학생을 삭제할까요?\n계정과 캐릭터가 함께 지워지고 되돌릴 수 없습니다.`, '삭제')) return;
-      await run(remove, async () => { await api.removeStudent(s.id); await loadStudents(); await loadClasses(); });
-    });
     // 선물 아이템: 가진 것을 아이콘으로 보여 주고, '선물' 버튼으로 주거나 거둔다
     const mine = owned[s.id] ?? [], gift = el('button', 'small', '🎁 선물');
     gift.type = 'button';
@@ -114,8 +90,8 @@ async function loadStudents() {
     for (const m of got) icons.append(svgEl(m));
     icons.append(ITEM_LIST.filter((i) => mine.includes(i.id)).map((i) => i.icon).join(' ') || (got.length ? '' : '–'));
     icons.title = [...got.map((m) => m.name), ...ITEM_LIST.filter((i) => mine.includes(i.id)).map((i) => i.name)].join(', ');
-    const act = el('td'); act.append(gift, reissue, remove);
-    tr.append(el('td', null, s.no), el('td', null, s.name), el('td', 'muted', s.nickname || '(아직 없음)'), icons, el('td', locked ? 'warn' : 'muted', locked ? '잠김 (여러 번 틀림)' : s.mustChange ? '처음 비밀번호 사용 중' : '비밀번호 바꿈'), act);
+    const act = el('td'); act.append(gift);
+    tr.append(el('td', null, s.no), el('td', null, s.name), el('td', 'muted', s.nickname || '(아직 없음)'), icons, act);
     body.append(tr);
   }
 }
@@ -250,66 +226,6 @@ function giftDialog(s, mine, mineMedals = []) {
     panel.append(grid, el('p', 'muted', '훈장은 가슴(3개까지)과 별명 옆(5개까지)에, 아이템은 캐릭터 몸에 붙습니다(종류마다 하나씩, 6개까지). 학생이 다음에 로그인(또는 새로고침)하면 보이고, 학생이 스스로 만들거나 뗄 수는 없습니다.'), note, row);
   }, { wide: true });
 }
-
-/* ── 명단 등록 ── */
-// 명단 파일 올리기: 엑셀(.xlsx · .xls)과 CSV · TXT 모두 받는다. 읽은 내용은 아래 칸에 들어가므로 등록 전에 확인 · 수정할 수 있다
-$('rosterFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) run(null, async () => {
-  try { $('roster').value = await fileToText(f); } catch { throw new Error('파일을 읽지 못했습니다. 엑셀(.xlsx) 또는 CSV 파일인지 확인해 주세요'); }
-  const { rows } = preview();
-  if (!rows.length) message('파일에서 학생을 찾지 못했습니다. 첫 칸에 번호, 둘째 칸에 이름이 있는지 확인해 주세요', 'error');
-}); });
-$('rosterTemplate').addEventListener('click', () => run($('rosterTemplate'), async () => {
-  await downloadTemplate('학생명단-양식.xlsx', ['번호', '이름'], [[1, '김하늘'], [2, '이도윤'], [3, '박서연']], [8, 16]);
-  message('양식을 내려받았습니다. 예시 세 줄을 지우고 우리 반 명단을 적은 뒤 "엑셀 · CSV 파일 선택"으로 올려 주세요.');
-}));
-$('roster').addEventListener('input', preview);
-function preview() {
-  const { rows, errors } = parseRoster($('roster').value);
-  $('rosterInfo').textContent = rows.length ? `${rows.length}명을 등록합니다: ${rows.slice(0, 6).map((r) => `${r.no}번 ${r.name}`).join(', ')}${rows.length > 6 ? ' …' : ''}` : '';
-  $('rosterErrors').textContent = errors.join('\n');
-  return { rows, errors };
-}
-$('rosterBtn').addEventListener('click', () => run($('rosterBtn'), async () => {
-  const { rows, errors } = preview();
-  if (errors.length) throw new Error('명단에 고칠 곳이 있습니다. 아래 빨간 글을 확인해 주세요');
-  if (!rows.length) throw new Error('등록할 학생이 없습니다');
-  const res = await api.addStudents(current.id, rows, $('rosterPw').value.trim() || '1234');
-  $('roster').value = ''; preview();
-  renderCards(res.cards, `${res.cards.length}명을 등록했습니다.` + (res.failed?.length ? ` 등록하지 못한 번호: ${res.failed.join(', ')}` : ''));
-  await loadStudents(); await loadClasses();
-}));
-
-/* ── 로그인 카드 ── */
-function renderCards(cards, note) {
-  const box = $('cardGrid'); box.replaceChildren();
-  for (const c of cards) {
-    const card = el('div', 'card');
-    card.append(el('div', 'cTop', `${current.school} ${current.name} (학급 코드 ${current.code})`), el('div', 'cName', `${c.no}번  ${c.name}`));
-    const rows = el('dl');
-    // 학번 = 학년 + 반 + 번호(두 자리). 예: 2학년 3반 12번 → 2312. 학생은 학번과 비밀번호만 적고 들어온다
-    const studentCode = `${current.grade}${current.class_no}${String(c.no).padStart(2, '0')}`;
-    for (const [k, v] of [['학번', studentCode], ['처음 비밀번호', c.pin]]) rows.append(el('dt', null, k), el('dd', k === '학번' ? null : 'pin', v));
-    card.append(rows, el('div', 'cUrl', siteUrl), el('div', 'cTip', '로그인하면 비밀번호를 나만 아는 것으로 바꿔요 · 별명은 직접 정해요'));
-    box.append(card);
-  }
-  $('cardNote').textContent = note + ' 학생이 로그인하면 비밀번호를 스스로 바꾸도록 안내가 나옵니다. 잊어버리면 학생 표의 "비밀번호 초기화"를 누르세요.';
-  show('cards'); $('cards').scrollIntoView({ block: 'start' });
-}
-$('printBtn').addEventListener('click', () => window.print());
-$('closeCards').addEventListener('click', () => show('cards', false));
-
-/* ── 학년말 일괄 삭제 ── */
-$('deleteClassBtn').addEventListener('click', () => {
-  $('deleteCode').value = ''; $('deleteHint').textContent = `확인을 위해 학급 코드 ${current.code} 를 그대로 입력해 주세요.`;
-  show('deleteBox');
-});
-$('deleteCancel').addEventListener('click', () => show('deleteBox', false));
-$('deleteConfirm').addEventListener('click', () => run($('deleteConfirm'), async () => {
-  const res = await api.deleteClass(current.id, $('deleteCode').value.trim());
-  show('deleteBox', false); show('classDetail', false); show('cards', false);
-  message(`학급과 학생 ${res.deleted}명의 계정 · 캐릭터를 모두 삭제했습니다.`);
-  current = null; await loadClasses();
-}));
 
 run(null, start);
 window.__teacher = { api };        // 점검용

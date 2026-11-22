@@ -1,0 +1,102 @@
+/* 아틀리에 — 포털과 같은 '어두운 전시장' 분위기. 색·간격은 맨 위 변수 묶음에서 바꾼다. 외부 글꼴 없음 */
+:root {
+  --bg: #08090a; --surface: #15161a; --surface-2: #1d1f24; --ink: #f7f8f8; --muted: #8a8f98; --accent: #9aa8ff;
+  --line: rgba(255, 255, 255, 0.22); --line-soft: rgba(255, 255, 255, 0.1);
+  --ok: #7ddc9a; --warn: #ffb86b; --bad: #ff8f8f;
+  --maxw: 880px; --radius: 14px;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; background: var(--bg); }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.65; word-break: keep-all; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+a { color: var(--accent); }
+h1, h2, h3, p, ul { margin: 0; } ul { padding: 0; list-style: none; }
+h1 { font-size: clamp(26px, 6vw, 40px); font-weight: 600; letter-spacing: -0.03em; line-height: 1.25; }
+h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+h3 { font-size: 15px; font-weight: 700; color: var(--muted); margin: 24px 0 10px; }
+.hidden { display: none !important; }
+.muted { color: var(--muted); font-size: 13.5px; } .pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.warn { color: var(--warn); } .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px 96px; }
+
+.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 64px; border-bottom: 1px solid var(--line); margin-bottom: 28px; }
+.brand { font-weight: 700; font-size: 17px; letter-spacing: -0.02em; color: var(--ink); text-decoration: none; }
+.brand small { font-weight: 400; color: var(--muted); margin-left: 8px; font-size: 13px; }
+.who { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); min-width: 0; }
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; } .row.between { justify-content: space-between; flex-wrap: nowrap; } .row.end { justify-content: flex-end; margin-top: 18px; }
+.stack { display: grid; gap: 12px; }
+
+/* 버튼 · 입력 */
+.btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; white-space: nowrap; font: inherit; font-size: 15px; font-weight: 600; min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid transparent; background: var(--ink); color: #111; cursor: pointer; }
+.btn.small { min-height: 36px; padding: 0 12px; font-size: 13.5px; }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn.danger { background: var(--bad); color: #2a0b0b; } .btn.ghost.danger { background: transparent; color: var(--bad); border-color: rgba(255, 143, 143, 0.45); }
+.btn:disabled { opacity: 0.5; cursor: default; } .btn.busy { cursor: progress; }
+.btn:focus-visible, .card:focus-visible, .drop:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+label.f { display: grid; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--muted); }
+input[type=text], input[type=password], input[type=email], input[type=url], input[type=number], input[type=datetime-local], textarea, select {
+  font: inherit; font-size: 16px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; width: 100%; color-scheme: dark; }
+textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
+label.check { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; cursor: pointer; }
+label.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+/* 카드 */
+.card { display: block; width: 100%; text-align: left; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+button.card { cursor: pointer; }
+@media (prefers-reduced-motion: no-preference) { button.card { transition: border-color 0.2s, transform 0.2s; } button.card:hover { border-color: rgba(255, 255, 255, 0.55); transform: translateY(-2px); } }
+.card h2 { margin-bottom: 4px; }
+.chip { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; font-size: 12.5px; font-weight: 700; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.chip.ok { color: var(--ok); border-color: rgba(125, 220, 154, 0.5); } .chip.soon { color: var(--warn); border-color: rgba(255, 184, 107, 0.5); }
+.chip.late { color: var(--bad); border-color: rgba(255, 143, 143, 0.5); } .chip.pin { color: var(--accent); border-color: rgba(154, 168, 255, 0.5); }
+.notice { border-left: 3px solid var(--accent); }
+.notice .pre { margin-top: 8px; font-size: 15.5px; }
+.empty { padding: 28px 20px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
+.banner { padding: 12px 16px; border-radius: 10px; background: rgba(255, 184, 107, 0.12); border: 1px solid rgba(255, 184, 107, 0.45); color: var(--warn); font-size: 14px; margin-bottom: 16px; }
+
+/* 파일 */
+.file { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.file:first-child { border-top: 0; } .fileName { display: grid; min-width: 0; }
+.drop { display: grid; gap: 2px; place-items: center; text-align: center; padding: 22px 16px; border: 1.5px dashed var(--line); border-radius: var(--radius); cursor: pointer; background: var(--surface-2); }
+.drop.over { border-color: var(--accent); background: rgba(154, 168, 255, 0.1); }
+.progress { display: grid; gap: 6px; padding: 10px 0; font-size: 13.5px; } .progress .bar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.progress .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; } .progress.failed .bar i { background: var(--bad); }
+
+/* 탭 · 표 */
+.tabs { display: flex; gap: 6px; margin-bottom: 20px; overflow-x: auto; }
+.tabs button { font: inherit; font-size: 14.5px; font-weight: 600; min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.tabs button.sel { background: var(--ink); color: #111; border-color: var(--ink); }
+table { width: 100%; border-collapse: collapse; font-size: 14.5px; } th, td { text-align: left; padding: 9px 8px; border-top: 1px solid var(--line-soft); vertical-align: top; }
+th { color: var(--muted); font-size: 13px; font-weight: 600; border-top: 0; } td.none { color: var(--bad); }
+ol.steps { margin: 0; padding-left: 22px; display: grid; gap: 10px; } ol.steps li { padding-left: 4px; }
+code { background: var(--surface-2); padding: 2px 6px; border-radius: 6px; font-size: 13px; }
+
+/* 창 · 알림 */
+.overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); display: grid; place-items: center; padding: 16px; z-index: 50; overflow-y: auto; }
+.panel { width: min(560px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px; display: grid; gap: 14px; max-height: calc(100vh - 32px); overflow-y: auto; }
+.panel.viewer { width: min(920px, 100%); } .panel.viewer img, .panel.viewer video { max-width: 100%; max-height: 70vh; margin: 0 auto; border-radius: 8px; } .panel.viewer iframe { width: 100%; height: 70vh; border: 0; background: #fff; border-radius: 8px; } .panel.viewer audio { width: 100%; }
+#toasts { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); display: grid; gap: 8px; z-index: 60; width: min(440px, calc(100vw - 32px)); }
+.toast { padding: 12px 16px; border-radius: 12px; background: #2a2c33; border: 1px solid var(--line); font-size: 14.5px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+.toast.error { background: #3a1c1c; border-color: rgba(255, 143, 143, 0.5); color: #ffd0d0; }
+
+/* 훌륭한 실패 (프로세스 저널) */
+input[type=date] { font: inherit; font-size: 15px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; color-scheme: dark; }
+.journal { border-color: rgba(154, 168, 255, 0.55); background: linear-gradient(180deg, rgba(154, 168, 255, 0.1), var(--surface) 70%); }
+.eyebrow { font-size: 12.5px; font-weight: 700; color: var(--accent); letter-spacing: 0.02em; }
+.chat { display: grid; gap: 10px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); max-height: 56vh; min-height: 180px; overflow-y: auto; align-content: start; }
+.bubble { max-width: 86%; padding: 10px 14px; border-radius: 14px; font-size: 15.5px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-2); border: 1px solid var(--line-soft); justify-self: start; }
+.bubble.me { justify-self: end; background: rgba(154, 168, 255, 0.18); border-color: rgba(154, 168, 255, 0.45); }
+.bubble.wait { color: var(--muted); }
+.bubble small { display: block; font-size: 11.5px; font-weight: 700; color: var(--muted); margin-bottom: 2px; }
+.say { display: flex; gap: 8px; align-items: flex-end; margin-top: 10px; } .say textarea { min-height: 52px; height: 52px; }
+.sum { display: grid; gap: 10px; } .sum div { display: grid; gap: 2px; } .sum b { font-size: 13px; color: var(--accent); }
+.feedback { border-left: 3px solid var(--ok); padding: 8px 12px; background: rgba(125, 220, 154, 0.08); border-radius: 0 10px 10px 0; }
+.feedback b { font-size: 13px; color: var(--ok); display: block; }
+.careful { padding: 12px 14px; border-radius: 10px; background: rgba(255, 143, 143, 0.08); border: 1px solid rgba(255, 143, 143, 0.3); font-size: 13.5px; color: #f0c9c9; }
+details > summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
+
+.made { padding: 32px 0 0; text-align: center; font-size: 12.5px; line-height: 1.7; letter-spacing: 0.04em; color: rgba(255, 255, 255, 0.32); }
+.made b { font-weight: 600; color: rgba(255, 255, 255, 0.5); } .made a { color: inherit; }
+
+.login { max-width: 400px; margin: 8vh auto 0; display: grid; gap: 14px; }
+@media (max-width: 560px) { .file { flex-direction: column; align-items: stretch; } .file .row { justify-content: flex-end; } .brand small { display: none; } }

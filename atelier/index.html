@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#08090a">
+  <title>수업 아틀리에</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="./">수업 아틀리에<small>과제 · 공지 · 제출</small></a>
+      <div class="who">
+        <a id="portalLink" class="btn ghost small" href="#">← 수업 공간</a>
+        <span id="who" class="who hidden"><span id="whoName" class="ellipsis"></span><button id="logout" class="btn ghost small" type="button">로그아웃</button></span>
+      </div>
+    </header>
+
+    <div id="demoBanner" class="banner hidden">연습 모드입니다. 여기서 한 일은 저장되지 않고, 새로 고치면 처음으로 돌아갑니다.</div>
+
+    <!-- 로그인 -->
+    <div id="loginView" class="login hidden">
+      <h1>수업 아틀리에</h1>
+      <p id="loginHint" class="muted">과제를 보고 제출하려면 로그인해 주세요. 수업 공간에서 쓰는 구글 계정으로 들어옵니다.</p>
+      <button id="loginBtn" class="btn" type="button">구글 계정으로 로그인</button>
+      <p class="muted">선생님은 <a href="teacher.html">교사용 화면</a>으로 들어가 주세요.</p>
+    </div>
+
+    <!-- 첫 화면: 공지 + 내 과제 -->
+    <main id="homeView" class="hidden">
+      <section id="journalSection" class="hidden" style="margin-bottom:8px"></section>
+      <section id="noticeSection">
+        <h3>공지</h3>
+        <div id="notices" class="stack"></div>
+      </section>
+      <section>
+        <h3>내 과제</h3>
+        <div id="assignments" class="stack"></div>
+      </section>
+    </main>
+
+    <!-- 과제 한 개 -->
+    <main id="detailView" class="hidden"></main>
+
+    <footer class="made">made by <b>경대쌤</b><br><a href="mailto:kyungdaelab@gmail.com">kyungdaelab@gmail.com</a></footer>
+  </div>
+
+  <script type="importmap">
+  { "imports": { "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm" } }
+  </script>
+  <script type="module" src="src/student.js"></script>
+</body>
+</html>

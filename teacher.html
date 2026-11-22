@@ -122,7 +122,8 @@
   .code { font-family: Consolas, monospace; font-weight: 700; font-size: 17px; color: #2a5fc0; letter-spacing: .04em; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; } th, td { padding: 8px 10px; border-bottom: 1px solid #ece6d8; text-align: left; } th { font-size: 13px; color: #6b6558; }
   td.warn { color: #c0392b; font-weight: 700; } td button { margin-right: 6px; }
-  #rosterErrors { color: #c0392b; white-space: pre-wrap; font-size: 13px; }
+  #rosterErrors, #promoteErrors { color: #c0392b; white-space: pre-wrap; font-size: 13px; }
+  #promote { min-height: 110px; font-family: Consolas, "Malgun Gothic", monospace; }
   #cardGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-top: 14px; }
   .card { border: 2px dashed #b9b09c; border-radius: 12px; padding: 14px 16px; background: #fff; break-inside: avoid; }
   .cTop { font-size: 12px; color: #6b6558; } .cName { font-size: 18px; font-weight: 700; margin: 2px 0 8px; }
@@ -150,7 +151,7 @@
 <main>
   <header>
     <h1>가상 미술관 · 교사용</h1>
-    <div class="row noprint" style="align-items:center"><span id="who" class="muted"></span><a href="./?home" class="muted">← 처음 화면</a><button id="logout2" type="button" class="small">로그아웃</button></div>
+    <div class="row noprint" style="align-items:center"><span id="who" class="muted"></span><a id="portalLink" href="#" class="muted">← 선생님 수업 공간</a><a href="./?home" class="muted">← 미술관 처음 화면</a><button id="logout2" type="button" class="small">로그아웃</button></div>
   </header>
   <div id="demoBanner" class="hidden">연습 모드입니다. 여기서 만든 전시실 · 작품 · 학급은 저장되지 않고, 새로고침하면 사라집니다. (화면을 미리 써 보는 용도. 관리자 탭도 볼 수 있습니다)</div>
   <div id="msg" class="hidden"></div>
@@ -158,18 +159,29 @@
   <!-- 로그인 -->
   <section id="loginView" class="hidden">
     <h2>교사 로그인</h2>
-    <form id="loginForm" class="row">
-      <label class="f">이메일<input id="email" type="email" autocomplete="username" required></label>
-      <label class="f">비밀번호<input id="password" type="password" autocomplete="current-password" required></label>
-      <button id="loginBtn" type="submit">로그인</button>
-    </form>
-    <h3>처음이신가요?</h3>
-    <p class="muted">위에 이메일과 비밀번호(8자 이상)를 적고, 아래에 이름과 학교를 적은 뒤 가입 신청을 누르세요. 관리자가 승인하면 전시실을 만들 수 있습니다.</p>
-    <div class="row">
-      <label class="f">이름<input id="tName" type="text" maxlength="40"></label>
-      <label class="f">학교<input id="tSchool" type="text" maxlength="60"></label>
-      <button id="signupBtn" type="button" class="light">가입 신청</button>
+    <div id="googleLogin">
+      <button id="googleBtn" type="button">구글 계정으로 로그인</button>
+      <p class="muted" style="margin-top:8px">처음이면 구글로 로그인한 뒤 이름과 학교를 적어 가입 신청을 합니다. 관리자가 승인하면 전시실을 만들 수 있습니다.</p>
     </div>
+    <!-- 구글로 로그인했지만 아직 교사 신청을 하지 않은 경우 -->
+    <div id="applyBox" class="hidden">
+      <h3>교사 가입 신청</h3>
+      <p class="muted">구글 계정으로 로그인했습니다. 이름과 학교를 적고 가입 신청을 눌러 주세요.</p>
+      <div class="row">
+        <label class="f">이름<input id="tName" type="text" maxlength="40"></label>
+        <label class="f">학교<input id="tSchool" type="text" maxlength="60"></label>
+        <button id="signupBtn" type="button">가입 신청</button>
+        <button id="applyLogout" type="button" class="light">다른 계정으로</button>
+      </div>
+    </div>
+    <details id="emailLogin" style="margin-top:18px">
+      <summary class="muted" style="cursor:pointer">예전에 이메일과 비밀번호로 가입한 선생님</summary>
+      <form id="loginForm" class="row" style="margin-top:10px">
+        <label class="f">이메일<input id="email" type="email" autocomplete="username" required></label>
+        <label class="f">비밀번호<input id="password" type="password" autocomplete="current-password" required></label>
+        <button id="loginBtn" type="submit" class="light">로그인</button>
+      </form>
+    </details>
   </section>
 
   <div id="appView" class="hidden">
@@ -181,7 +193,7 @@
 
     <nav id="tabs" class="hidden noprint">
       <button id="tab-rooms" type="button">내 전시실</button>
-      <button id="tab-classes" type="button">학급 · 학생</button>
+      <button id="tab-classes" type="button">선물 주기</button>
       <button id="tab-admin" type="button" class="hidden">관리자</button>
     </nav>
 
@@ -202,14 +214,7 @@
       <section>
         <h2>내 학급</h2>
         <div id="classList"></div>
-        <h3>새 학급 만들기</h3>
-        <form id="classForm" class="row">
-          <label class="f">학교 이름<input id="cSchool" type="text" maxlength="60" placeholder="예: 한빛초등학교"></label>
-          <label class="f">학년<input id="cGrade" type="number" min="1" max="12" style="width:80px"></label>
-          <label class="f">반<input id="cNo" type="number" min="1" max="40" style="width:80px"></label>
-          <button id="classBtn" type="submit">학급 만들기</button>
-        </form>
-        <p class="muted">학급 코드는 자동으로 만들어집니다. (학교 이름 앞 두 글자의 첫소리 + 학년 + 반, 예: 한빛초 2학년 3반 → HB-2-3)</p>
+        <p class="muted">학급을 만들고 가입한 학생을 관리하는 일(삭제 · 진급 · 학년말 정리)은 <a id="classesPortal" href="#">수업 공간의 선생님 화면</a>에서 합니다. 여기서는 학급을 골라 학생에게 선물을 줍니다.</p>
       </section>
 
       <section id="medalSection">
@@ -222,34 +227,11 @@
       <section id="classDetail" class="hidden">
         <h2><span id="classTitle"></span> · 학급 코드 <span id="classCode" class="code"></span></h2>
         <h3>학생 <span id="studentCount" class="muted"></span></h3>
-        <p id="noStudents" class="muted">아직 등록된 학생이 없습니다.</p>
-        <table><thead><tr><th>번호</th><th>이름 (교사만 봄)</th><th>별명 (학생 화면)</th><th>선물</th><th>상태</th><th></th></tr></thead><tbody id="studentRows"></tbody></table>
+        <p id="noStudents" class="muted">아직 가입한 학생이 없습니다.</p>
+        <table><thead><tr><th>번호</th><th>이름 (교사만 봄)</th><th>별명 (학생 화면)</th><th>선물</th><th></th></tr></thead><tbody id="studentRows"></tbody></table>
 
-        <h3>명단 등록</h3>
-        <p class="muted">한 줄에 한 명씩 <b>번호, 이름</b>을 적거나, 엑셀·한글 표에서 두 칸을 복사해 붙여 넣으세요. <b>엑셀 양식 받기</b>로 양식을 내려받아 채운 뒤 그 파일을 그대로 올려도 됩니다(엑셀 · CSV). 번호를 생략하면 차례대로 매깁니다.<br>
-          학생 화면에는 여기 적은 이름이 나오지 않고, 학생이 직접 정한 별명만 나옵니다. 학생은 <b>학번(학년+반+번호, 예: 2학년 3반 12번 → 2312)과 비밀번호</b>로 들어옵니다.<br>
-          처음 비밀번호는 선생님이 정하고, 학생이 로그인하면 스스로 바꾸도록 안내가 나옵니다. 학생이 잊어버리면 위 표의 <b>비밀번호 초기화</b>를 누르세요.</p>
-        <textarea id="roster" placeholder="1, 김하늘&#10;2, 이도윤&#10;3, 박서연"></textarea>
-        <div class="row" style="margin-top:8px; align-items:center">
-          <label class="f">처음 비밀번호<input id="rosterPw" type="text" maxlength="20" value="1234" autocomplete="off" style="width:120px"></label>
-          <button id="rosterBtn" type="button">학생 등록하기</button>
-          <button id="rosterTemplate" type="button" class="small light">엑셀 양식 받기</button>
-          <label class="small link">엑셀 · CSV 파일 선택 <input id="rosterFile" type="file" accept=".xlsx,.xls,.csv,.txt" hidden></label>
-          <span id="rosterInfo" class="muted"></span>
-        </div>
-        <div id="rosterErrors"></div>
-
-        <h3>학년말 정리</h3>
-        <p class="muted">이 학급의 학생 계정, 캐릭터, 선물 아이템을 모두 지우고 학급도 삭제합니다. 되돌릴 수 없습니다. 전시실과 작품은 지워지지 않습니다.</p>
-        <button id="deleteClassBtn" type="button" class="danger">학급과 학생 데이터 모두 삭제</button>
       </section>
 
-      <section id="cards" class="hidden">
-        <h2 class="noprint">로그인 카드</h2>
-        <p id="cardNote" class="noprint"></p>
-        <div class="row noprint"><button id="printBtn" type="button">인쇄하기</button><button id="closeCards" type="button" class="light">닫기</button></div>
-        <div id="cardGrid"></div>
-      </section>
     </div>
 
     <!-- 관리자 -->
@@ -260,12 +242,6 @@
   made by <b style="color:#4a453b">경대쌤</b><br><a href="mailto:kyungdaelab@gmail.com" style="color:inherit">kyungdaelab@gmail.com</a>
 </footer>
 
-<div id="deleteBox" class="overlay hidden"><div class="panel">
-  <h2>학급 전체 삭제</h2>
-  <p id="deleteHint"></p>
-  <input id="deleteCode" type="text" autocomplete="off" style="width:100%">
-  <div class="row end"><button id="deleteCancel" type="button" class="light">취소</button><button id="deleteConfirm" type="button" class="danger">모두 삭제</button></div>
-</div></div>
 
 <script type="importmap">
 { "imports": {

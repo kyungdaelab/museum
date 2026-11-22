@@ -5,6 +5,7 @@
 // 전시실 · 작품은 DB 의 열 이름 그대로 다룬다 (rooms: title, type 'flat' | 'sculpture', max_artworks, visibility, … /
 // artworks: slot, kind, title, artist, grade, material, size_cm, description, file_path, thumbnail_path, file_size, adjust)
 import { backendEnabled, getClient } from '../data/backend.js';
+import { signInWithGoogle, applyTeacher, forgetAccount } from '../data/student-auth.js';
 import { uploadArtwork, uploadFile, confirmUpload, deleteArtwork as removeArtworkFiles, deleteRoom as removeRoomFiles } from '../data/storage.js';
 
 export const KIND_OF_TYPE = { flat: ['image'], sculpture: ['model', 'splat'], mixed: ['image', 'model', 'splat'] };
@@ -43,6 +44,134 @@ export function parseRoster(text) {
   return { rows: rows.sort((a, b) => a.no - b.no), errors };
 }
 
+// 학번 → 가능한 [학년, 반, 번호] 들.  학번 = 학년 + 반 + 번호(두 자리). 예: 2312 → 2학년 3반 12번 (서버 student-login 과 같은 규칙)
+//   다섯 자리는 (학년 1 + 반 2) 가 먼저, (학년 2 + 반 1) 이 다음.  예전 방식 20312 → 2학년 3반 12번
+export function parseStudentCode(code) {
+  const sc = String(code).trim();
+  if (!/^\d{4,6}$/.test(sc)) return [];
+  const head = sc.slice(0, -2), no = Number(sc.slice(-2));
+  const splits = head.length === 2 ? [1] : head.length === 3 ? [1, 2] : [2];
+  return no < 1 ? [] : splits.map((g) => ({ grade: Number(head.slice(0, g)), classNo: Number(head.slice(g)), no }))
+    .filter((p) => p.grade >= 1 && p.grade <= 12 && p.classNo >= 1 && p.classNo <= 40);
+}
+
+// 진급 명단 글 → 옮길 계획.  한 줄에 "지금 학번, 새 학번" (쉼표 · 탭 · 빈칸 · 화살표로 구분)
+//   classes  = 내 학급 [{ id, school, grade, class_no, name }]     students = 내 학생 [{ id, classId, no, name }]
+//   반환 { moves: [{ studentId, name, from, to, classId | null, classKey, no }], creates: [{ key, school, grade, classNo }], errors }
+//     classId 가 null 이면 새 학급을 만들어야 한다 → creates 의 같은 key 로 만든 뒤 채운다
+export function planPromotion(text, classes, students) {
+  const moves = [], errors = [], creates = new Map(), seenStudent = new Set(), seenSeat = new Map();
+  const classById = new Map(classes.map((c) => [c.id, c]));
+  const findClasses = (p, school) => classes.filter((c) => c.grade === p.grade && c.class_no === p.classNo && (school == null || c.school === school));
+  for (const [i, raw] of String(text).split(/\r?\n/).entries()) {
+    const line = raw.trim(), at = `${i + 1}번째 줄`;
+    if (!line) continue;
+    const cells = line.split(/[\s,;→>-]+/).filter(Boolean);
+    if (cells.length < 2 || !/^\d+$/.test(cells[0]) || !/^\d+$/.test(cells[1])) {
+      if (i === 0 && !/^\d/.test(line)) continue;                                  // 제목 줄은 건너뜀
+      errors.push(`${at}: "지금 학번, 새 학번" 두 칸으로 적어 주세요 (${line})`); continue;
+    }
+    const [from, to] = cells;
+    // 지금 학번 → 학생
+    const found = [];
+    for (const p of parseStudentCode(from)) for (const c of findClasses(p)) { const s = students.find((x) => x.classId === c.id && x.no === p.no); if (s && !found.includes(s)) found.push(s); }
+    if (!found.length) { errors.push(`${at}: 지금 학번 ${from} 인 학생을 내 학급에서 찾지 못했습니다`); continue; }
+    if (found.length > 1) { errors.push(`${at}: 학번 ${from} 인 학생이 내 학급에 두 명 이상 있습니다 (학교가 다른 학급). 한쪽 학급을 먼저 정리해 주세요`); continue; }
+    const student = found[0], school = classById.get(student.classId).school;
+    if (seenStudent.has(student.id)) { errors.push(`${at}: 학번 ${from} 이 두 번 나옵니다`); continue; }
+    // 새 학번 → 옮겨 갈 학급 (같은 학교에서 찾고, 없으면 새로 만든다)
+    const cands = parseStudentCode(to);
+    if (!cands.length) { errors.push(`${at}: 새 학번 ${to} 를 읽지 못했습니다 (학년 + 반 + 번호 두 자리, 예: 3105)`); continue; }
+    let target = null, pick = cands[0];
+    for (const p of cands) { const c = findClasses(p, school)[0]; if (c) { target = c; pick = p; break; } }
+    const classKey = target ? target.id : `${school}|${pick.grade}|${pick.classNo}`, seat = `${classKey}#${pick.no}`;
+    if (seenSeat.has(seat)) { errors.push(`${at}: 새 학번 ${to} 가 ${seenSeat.get(seat)}번째 줄과 겹칩니다`); continue; }
+    if (!target && !creates.has(classKey)) creates.set(classKey, { key: classKey, school, grade: pick.grade, classNo: pick.classNo });
+    seenStudent.add(student.id); seenSeat.set(seat, i + 1);
+    moves.push({ studentId: student.id, name: student.name, from, to, classId: target?.id ?? null, classKey, no: pick.no });
+  }
+  // 옮겨 갈 자리에 이미 (이번에 옮기지 않는) 학생이 있는지
+  for (const m of moves) {
+    const sitting = m.classId && students.find((s) => s.classId === m.classId && s.no === m.no && !seenStudent.has(s.id));
+    if (sitting) errors.push(`새 학번 ${m.to}: 이미 ${sitting.name} 학생이 쓰고 있습니다. 그 학생도 명단에 넣어 함께 옮기거나 번호를 바꿔 주세요`);
+  }
+  return { moves, creates: [...creates.values()], errors };
+}
+
+/* ───────────── 명렬표 ───────────── */
+const normName = (s) => String(s ?? '').replace(/\s/g, '').toLowerCase();
+// 명렬표 글 → 줄 [{ line, code, name, prev }].  한 줄에 한 명:
+//   "학번, 이름"  또는  "학년, 반, 번호, 이름"  (엑셀에서 복사해 붙여 넣어도 된다)
+//   새 학년에 동명이인이 있을 때만 맨 뒤 칸에 이전 학번을 더 적는다:  "3105, 김하늘, 2312"
+export function parseRosterText(text) {
+  const rows = [], errors = [];
+  for (const [i, raw] of String(text).split(/\r?\n/).entries()) {
+    const line = raw.trim(), at = `${i + 1}번째 줄`;
+    if (!line) continue;
+    let cells = line.split(/[\t,;]+/).map((c) => c.trim()).filter(Boolean);
+    if (cells.length < 2) cells = line.split(/\s+/);
+    const num = (c) => /^\d+$/.test(c ?? '');
+    let code, name, prev;
+    if (/^\d{4,6}$/.test(cells[0]) && cells[1] && !num(cells[1])) [code, name, prev] = cells;
+    else if (num(cells[0]) && num(cells[1]) && num(cells[2]) && cells[3] && cells[0].length <= 2 && cells[1].length <= 2 && cells[2].length <= 2)
+      [code, name, prev] = [`${+cells[0]}${+cells[1]}${String(+cells[2]).padStart(2, '0')}`, cells[3], cells[4]];
+    else { if (i === 0 && !/^\d/.test(line)) continue; errors.push(`${at}: "학번, 이름" 으로 적어 주세요 (${line})`); continue; }      // 첫 줄의 제목은 건너뜀
+    if (name.length > 20) { errors.push(`${at}: 이름은 20자까지입니다`); continue; }
+    if (prev != null && !/^\d{4,6}$/.test(prev)) { errors.push(`${at}: 이전 학번은 숫자 4~6자리로 적어 주세요 (${prev})`); continue; }
+    rows.push({ line: i + 1, code, name, prev: prev ?? '' });
+  }
+  return { rows, errors };
+}
+
+// 명렬표를 지금 상태와 견주어 '무엇을 할지' 계획을 세운다.
+//   classes = 내 학급 [{ id, school, grade, class_no }]     entries = 지금 명렬표 [{ class_id, no, name, student_id }]
+//   반환 { creates: [{ key, school, grade, classNo }], entries: [{ classId | null, classKey, no, name, studentId | null }],
+//          drops: [{ class_id, no }], errors, count: { fresh(새 자리), moved(정보가 이어지는 학생), same(그대로) } }
+//   · 같은 자리에 같은 이름이 이미 있으면 그대로 둔다
+//   · 다른 자리에 같은 이름이 한 명 있으면(또는 이전 학번을 적어 주면) 그 학생을 새 자리로 옮긴다 → 계정 · 캐릭터 · 제출 기록이 이어진다
+export function planRoster(text, school, classes, entries) {
+  const { rows, errors } = parseRosterText(text);
+  const out = { creates: [], entries: [], drops: [], errors, count: { fresh: 0, moved: 0, same: 0 } };
+  const seatKey = (classId, no) => `${classId}#${no}`;
+  const bySeat = new Map(entries.map((e) => [seatKey(e.class_id, e.no), e]));
+  const classOf = (p, sch) => classes.find((c) => c.grade === p.grade && c.class_no === p.classNo && (sch == null || c.school === sch));
+  const creates = new Map(), used = new Set(), taken = new Map(), moving = new Set();
+  for (const r of rows) {
+    const at = `${r.line}번째 줄`, cands = parseStudentCode(r.code);
+    if (!cands.length) { errors.push(`${at}: 학번 ${r.code} 를 읽지 못했습니다 (학년 + 반 + 번호 두 자리, 예: 2312)`); continue; }
+    let pick = cands[0], cls = null;
+    for (const p of cands) { const c = classOf(p, school); if (c) { cls = c; pick = p; break; } }
+    const classKey = cls ? cls.id : `${school}|${pick.grade}|${pick.classNo}`, seat = seatKey(classKey, pick.no);
+    if (taken.has(seat)) { errors.push(`${at}: 학번 ${r.code} 가 ${taken.get(seat)}번째 줄과 겹칩니다`); continue; }
+    taken.set(seat, r.line);
+    const here = cls ? bySeat.get(seat) : null;
+    if (here && normName(here.name) === normName(r.name) && !r.prev) { used.add(here); out.count.same++; continue; }       // 이미 그 자리에 그 학생
+
+    // 이어 갈 학생 찾기: 이전 학번을 적었으면 그 자리, 아니면 다른 자리에 있는 같은 이름
+    let from = null;
+    if (r.prev) {
+      for (const p of parseStudentCode(r.prev)) { for (const c of classes.filter((x) => x.grade === p.grade && x.class_no === p.classNo)) { const e = bySeat.get(seatKey(c.id, p.no)); if (e && !used.has(e)) { from = e; break; } } if (from) break; }
+      if (!from) { errors.push(`${at}: 이전 학번 ${r.prev} 인 학생을 내 학급에서 찾지 못했습니다`); continue; }
+    } else {
+      const same = entries.filter((e) => e !== here && !used.has(e) && normName(e.name) === normName(r.name));
+      if (same.length > 1) { errors.push(`${at}: ${r.name} 학생이 지금 명렬표에 ${same.length}명 있습니다(동명이인). 이름 뒤에 이전 학번을 적어 주세요 → ${r.code}, ${r.name}, 이전학번`); continue; }
+      from = same[0] ?? null;
+    }
+    if (!cls && !creates.has(classKey)) creates.set(classKey, { key: classKey, school, grade: pick.grade, classNo: pick.classNo });
+    if (from) { used.add(from); out.drops.push({ class_id: from.class_id, no: from.no }); if (from.student_id) moving.add(from.student_id); }
+    out.entries.push({ classId: cls?.id ?? null, classKey, no: pick.no, name: r.name, studentId: from?.student_id ?? null, code: r.code });
+    if (from) out.count.moved++; else out.count.fresh++;
+  }
+  // 넣으려는 자리에 이미 다른 학생이 가입해 있고, 그 학생은 이번에 옮겨 가지 않는 경우
+  for (const e of out.entries) {
+    const here = e.classId && bySeat.get(seatKey(e.classId, e.no));
+    if (here?.student_id && !moving.has(here.student_id) && (e.studentId || normName(here.name) !== normName(e.name)))
+      errors.push(`학번 ${e.code}: 그 자리에 이미 ${here.name} 학생이 가입해 있습니다. 그 학생의 새 학번도 명렬표에 넣거나, 먼저 가입을 취소해 주세요`);
+  }
+  out.creates = [...creates.values()];
+  return out;
+}
+
 async function fnError(error) {
   try { const b = await error.context.json(); return new Error(b.error || error.message); } catch { return new Error(error.message || '서버에 연결하지 못했습니다'); }
 }
@@ -64,27 +193,34 @@ async function serverApi() {
       const { data } = await db.auth.getSession(); const user = data.session?.user;
       if (!user || user.is_anonymous) return null;
       const profile = must(await db.from('profiles').select('name, role, approved, school').eq('id', user.id).maybeSingle());
-      return { id: user.id, email: user.email, profile };
+      return { id: user.id, email: user.email, profile, googleName: user.user_metadata?.full_name ?? '' };      // profile 이 없으면 아직 교사 신청 전
     },
+    // 구글 로그인 화면으로 이동했다가 이 화면으로 돌아온다 / 구글로 로그인한 뒤 교사 가입 신청
+    async signInGoogle() { const r = await signInWithGoogle(); if (r.error) throw new Error(r.error); },
+    async applyTeacher(name, school) { const r = await applyTeacher(name, school); if (r.error) throw new Error(r.error); },
     async signIn(email, password) { const { error } = await db.auth.signInWithPassword({ email, password }); if (error) throw new Error('이메일 또는 비밀번호가 맞지 않습니다'); },
     async signUp(email, password, name, school) {
       const { error } = await db.auth.signUp({ email, password, options: { data: { name, school } } });
       if (error) throw new Error(error.message);
     },
-    async signOut() { await db.auth.signOut(); },
+    async signOut() { forgetAccount(); await db.auth.signOut(); },
 
     // ── 학급 · 학생 ──
+    // 내 학급 (졸업생 아카이브는 빼고, 학년 · 반 순서로)
     async listClasses() {
-      const rows = must(await db.from('classes').select('id, code, name, school, grade, class_no, students(count)').order('created_at', { ascending: false }));
+      const rows = must(await db.from('classes').select('id, code, name, school, grade, class_no, students(count)').eq('archived', false).order('grade').order('class_no'));
       return rows.map((c) => ({ ...c, count: c.students?.[0]?.count ?? 0 }));
     },
+    // 명렬표: 내 학급의 자리 [{ class_id, no, name, student_id(가입했으면), nickname, email }] / 반영 (계획은 planRoster 가 세운다)
+    rosterList: async () => must(await db.rpc('roster_list')),
+    rosterCommit: async (entries, drops) => must(await db.rpc('roster_commit', { p: { entries, drops } })),
+    // 졸업 처리(학급 → ○○학년도 졸업생 아카이브) / 아카이브 목록 / 졸업생 한 명이 냈던 자료
+    graduateClass: async (classId, year) => must(await db.rpc('graduate_class', { p_class: classId, p_year: year ?? null })),
+    graduates: async () => must(await db.rpc('graduates')),
+    graduateFiles: async (studentId) => must(await db.rpc('graduate_files', { p_student: studentId })),
     async createClass(school, grade, classNo) { return must(await db.rpc('create_class', { p_school: school, p_grade: grade, p_class_no: classNo })); },
-    async listStudents(classId) {
-      const students = must(await db.from('students').select('id, student_no, name, nickname').eq('class_id', classId).order('student_no'));
-      const status = must(await db.from('student_status').select('student_id, locked_until, pin_issued_at, must_change').eq('class_id', classId));
-      const byId = new Map(status.map((s) => [s.student_id, s]));
-      return students.map((s) => ({ id: s.id, no: s.student_no, name: s.name, nickname: s.nickname, lockedUntil: byId.get(s.id)?.locked_until ?? null, pinIssuedAt: byId.get(s.id)?.pin_issued_at ?? null, mustChange: !!byId.get(s.id)?.must_change }));
-    },
+    // 우리 반에 가입한 학생 [{ id, no, name, nickname, email(구글 계정), joined_at }]. 학생은 수업 공간에서 구글로 스스로 가입한다
+    async listStudents(classId) { return must(await db.rpc('class_members', { p_class: classId })); },
     // 선물 아이템: 학급 학생들이 가진 아이템 { 학생 id: [아이템 id, …] } / 주기 · 거두기 (권한은 DB 가 확인: 담당 교사와 관리자만)
     async listItems(classId) {
       const ids = must(await db.from('students').select('id').eq('class_id', classId)).map((s) => s.id);
@@ -116,6 +252,12 @@ async function serverApi() {
     async reissuePin(studentId, password) { return (await roster({ action: 'reissue', student_id: studentId, password })).card; },
     async removeStudent(studentId) { await roster({ action: 'remove', student_id: studentId }); },
     async deleteClass(classId, confirm) { return roster({ action: 'delete_class', class_id: classId, confirm }); },
+    // 진급 · 반 바꾸기: 내 학급의 모든 학생 / 학생 옮기기 [{ studentId, classId, no }] (권한 · 번호 겹침은 DB 가 확인, 전부 되거나 전부 안 됨)
+    async listAllStudents(classIds) {
+      if (!classIds.length) return [];
+      return must(await db.from('students').select('id, class_id, student_no, name').in('class_id', classIds)).map((s) => ({ id: s.id, classId: s.class_id, no: s.student_no, name: s.name }));
+    },
+    async moveStudents(moves) { return must(await db.rpc('move_students', { p_moves: moves.map((m) => ({ student_id: m.studentId, class_id: m.classId, no: m.no })) })); },
 
     // ── 전시실 ──
     async listRooms() {
@@ -181,6 +323,7 @@ async function serverApi() {
 /* ───────────── 연습 모드 (브라우저 안에서만) ───────────── */
 function demoApi() {
   const classes = [], students = [], rooms = [], artworks = [], editors = [], codes = new Map(), roomClasses = new Map();
+  const rosterRows = [], archive = [];        // 명렬표 자리 [{ class_id, no, name, student_id }] · 졸업생 아카이브
   const settings = { max_rooms_per_teacher: 3, default_limit_flat_mb: 100, default_limit_sculpture_mb: 300 };
   const teachers = [
     { teacher_id: 'me', name: '연습 교사', school: '연습초', role: 'admin', approved: true, email: 'me@example.com', created_at: '2026-11-01' },
@@ -195,7 +338,7 @@ function demoApi() {
   return {
     mode: 'demo',
     async session() { return { id: 'me', email: '연습 모드', profile: { name: '연습 교사', role: 'admin', approved: true, school: '연습초' } }; },
-    async signIn() {}, async signUp() {}, async signOut() {},
+    async signIn() {}, async signUp() {}, async signOut() {}, async signInGoogle() {}, async applyTeacher() {},
     async listClasses() { return classes.map((c) => ({ ...c, count: students.filter((s) => s.classId === c.id).length })); },
     async createClass(school, grade, classNo) {
       const base = `${schoolInitials(school)}-${grade}-${classNo}`; let code = base, i = 1;
@@ -211,7 +354,11 @@ function demoApi() {
       return { cards, failed: [], class_code: classes.find((c) => c.id === classId).code };
     },
     async reissuePin(studentId, password) { const p = checkPw(password), s = students.find((x) => x.id === studentId); s.pinIssuedAt = new Date().toISOString(); s.lockedUntil = null; s.mustChange = true; return { no: s.no, name: s.name, pin: p }; },
-    async removeStudent(studentId) { students.splice(students.findIndex((x) => x.id === studentId), 1); },
+    async removeStudent(studentId) {
+      students.splice(students.findIndex((x) => x.id === studentId), 1);
+      for (const r of rosterRows) if (r.student_id === studentId) r.student_id = null;        // 자리는 남는다 → 다시 가입할 수 있다
+      for (const g of archive) g.students = g.students.filter((s) => s.id !== studentId);
+    },
     async listMedals() { return medals.map((m) => ({ ...m })); },
     async saveMedal(m) {
       if (!String(m.name ?? '').trim()) throw new Error('이름을 적어 주세요');
@@ -230,6 +377,46 @@ function demoApi() {
       const n = students.filter((s) => s.classId === classId).length;
       for (let i = students.length - 1; i >= 0; i--) if (students[i].classId === classId) students.splice(i, 1);
       classes.splice(classes.indexOf(c), 1); return { deleted: n };
+    },
+    async listAllStudents(classIds) { return students.filter((s) => classIds.includes(s.classId)).map((s) => ({ id: s.id, classId: s.classId, no: s.no, name: s.name })); },
+    // 명렬표 · 졸업 (연습 모드). '가입한 학생'을 흉내 내려면 demoJoin(classId, no) 을 부른다
+    async rosterList() { return rosterRows.map((r) => { const s = students.find((x) => x.id === r.student_id); return { ...r, nickname: s?.nickname ?? null, email: s ? `student${s.no}@example.com` : null }; }); },
+    async rosterCommit(entries, drops) {
+      const moving = new Set(entries.map((e) => e.student_id).filter(Boolean));
+      const clash = entries.find((e) => { const r = rosterRows.find((x) => x.class_id === e.class_id && x.no === e.no); return r?.student_id && !moving.has(r.student_id) && (e.student_id || normName(r.name) !== normName(e.name)); });
+      if (clash) throw new Error(`이미 다른 학생이 가입해 있는 자리입니다: ${clash.no}번`);
+      const gone = (r) => drops.some((d) => d.class_id === r.class_id && d.no === r.no && (!r.student_id || moving.has(r.student_id))) || (r.student_id && moving.has(r.student_id));
+      for (let i = rosterRows.length - 1; i >= 0; i--) if (gone(rosterRows[i])) rosterRows.splice(i, 1);
+      for (const e of entries) {
+        if (e.student_id) Object.assign(students.find((s) => s.id === e.student_id), { classId: e.class_id, no: e.no, name: e.name });
+        const i = rosterRows.findIndex((x) => x.class_id === e.class_id && x.no === e.no), sitting = students.find((s) => s.classId === e.class_id && s.no === e.no);
+        const row = { class_id: e.class_id, no: e.no, name: e.name, student_id: e.student_id ?? sitting?.id ?? null };
+        if (i >= 0) rosterRows[i] = row; else rosterRows.push(row);
+      }
+      for (let i = classes.length - 1; i >= 0; i--) { const c = classes[i]; if (drops.some((d) => d.class_id === c.id) && !students.some((s) => s.classId === c.id) && !rosterRows.some((r) => r.class_id === c.id)) classes.splice(i, 1); }
+      return { entries: entries.length, moved: moving.size };
+    },
+    async demoJoin(classId, no) {
+      const r = rosterRows.find((x) => x.class_id === classId && x.no === no);
+      const s = { id: id(), classId, no, name: r.name, nickname: r.name.slice(-2) + '이', lockedUntil: null }; students.push(s); r.student_id = s.id; return s;
+    },
+    async graduateClass(classId, year) {
+      const c = classes.find((x) => x.id === classId), y = year ?? new Date().getFullYear();
+      let g = archive.find((a) => a.year === y); if (!g) archive.push(g = { class_id: id(), year: y, name: `${y}학년도 졸업생`, school: c.school, code: `GRAD-${y}`, students: [] });
+      const leaving = students.filter((s) => s.classId === classId);
+      for (const s of leaving) { g.students.push({ id: s.id, name: s.name, nickname: s.nickname, last_code: `${c.grade}${c.class_no}${String(s.no).padStart(2, '0')}`, email: `student${s.no}@example.com`, files: 0 }); students.splice(students.indexOf(s), 1); }
+      for (let i = rosterRows.length - 1; i >= 0; i--) if (rosterRows[i].class_id === classId) rosterRows.splice(i, 1);
+      classes.splice(classes.indexOf(c), 1);
+      return { graduated: leaving.length, year: y };
+    },
+    async graduates() { return archive.map((g) => ({ ...g, students: [...g.students] })); },
+    async graduateFiles() { return []; },
+    async moveStudents(moves) {
+      const moving = new Set(moves.map((m) => m.studentId));
+      const taken = moves.find((m) => students.some((s) => s.classId === m.classId && s.no === m.no && !moving.has(s.id)));
+      if (taken) throw new Error(`이미 다른 학생이 쓰고 있는 번호입니다: ${taken.no}번`);
+      for (const m of moves) Object.assign(students.find((s) => s.id === m.studentId), { classId: m.classId, no: m.no });
+      return moves.length;
     },
 
     async listRooms() { return rooms.map(view); },

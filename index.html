@@ -333,8 +333,10 @@
     <p id="gateLead">우리가 만든 작품을, 걸어 다니며 감상하는 전시 공간</p>
     <div id="gateGrow"></div>
     <div id="gateBtns">
-      <button id="gateEnter" type="button"><b>학생 · 관람객</b><small>캐릭터를 만들고 전시실로 들어가요</small></button>
-      <a id="gateTeacher" href="teacher.html"><b>선생님</b><small>전시실과 학급을 관리해요</small></a>
+      <!-- 로그인하지 않은 사람은 관람객(게스트)으로 별명만 정하고 들어간다. 학생 · 교사 로그인은 '수업 공간'에서 한다 -->
+      <button id="gateEnter" type="button"><b id="gateEnterTitle">관람객으로 들어가기</b><small id="gateEnterHint">별명을 정하고 전시실을 둘러봐요</small></button>
+      <!-- 학생 · 교사로 로그인했을 때만 보인다 -->
+      <a id="gateTeacher" class="hidden" href="#"><b>← 수업 공간</b><small>수업 공간 첫 화면으로 돌아가요</small></a>
     </div>
     <p id="gateMade">made by <b>경대쌤</b><br><a href="mailto:kyungdaelab@gmail.com">kyungdaelab@gmail.com</a></p>
   </div>
@@ -407,9 +409,10 @@
     <div id="lobbyHead">
       <div><h1>전시실 둘러보기</h1><p>들어가고 싶은 전시실을 골라 주세요.</p></div>
       <div class="lobbyBtns">
+        <!-- 수업 공간으로 돌아가기: 학생 · 교사로 로그인했을 때만 보인다 (게스트에게는 '처음 화면'만) -->
+        <a id="lobbyPortal" class="chip hidden" href="#">← 수업 공간</a>
         <a id="lobbyHome" class="chip" href="./?home">← 처음 화면</a>
-        <button id="lobbyLogin" class="chip hidden" type="button">학생 로그인</button>
-        <button id="lobbyPw" class="chip hidden" type="button">비밀번호 바꾸기</button>
+        <button id="lobbyLogin" class="chip hidden" type="button"></button>
         <button id="lobbyCustomize" class="chip" type="button">캐릭터 다시 꾸미기</button>
       </div>
     </div>
@@ -433,32 +436,6 @@
       <p id="voxMsg" class="muted"></p>
     </div>
   </div>
-</div>
-
-<!-- 학생 로그인 창 -->
-<div id="loginBox" class="hidden">
-  <form id="loginForm" class="loginForm" autocomplete="off">
-    <h2>학생 로그인</h2>
-    <p class="muted">학번과 비밀번호를 적어 주세요. 처음 비밀번호는 선생님이 알려 주세요. 별명은 들어간 뒤 캐릭터 꾸미기에서 정해요.</p>
-    <label>학번<input id="loginCode" type="text" inputmode="numeric" maxlength="6" placeholder="예: 2312 (2학년 3반 12번)" spellcheck="false"></label>
-    <label>비밀번호<input id="loginPin" type="password" maxlength="20" placeholder="••••"></label>
-    <label id="loginClassRow" class="hidden">학급 코드<input id="loginClass" type="text" maxlength="20" placeholder="예: HB-2-3" autocapitalize="characters" spellcheck="false"></label>
-    <p id="loginMsg"></p>
-    <div><button id="loginCancel" class="chip" type="button">취소</button><button id="loginSubmit" type="submit">로그인</button></div>
-  </form>
-</div>
-
-<!-- 학생: 비밀번호 바꾸기 -->
-<div id="pwBox" class="hidden">
-  <form id="pwForm" class="loginForm" autocomplete="off">
-    <h2>비밀번호 바꾸기</h2>
-    <p id="pwHint" class="muted">나만 아는 비밀번호로 바꿔요. (빈칸 없이 4~20자)</p>
-    <label>지금 비밀번호<input id="pwCurrent" type="password" maxlength="20"></label>
-    <label>새 비밀번호<input id="pwNext" type="password" maxlength="20"></label>
-    <label>새 비밀번호 한 번 더<input id="pwAgain" type="password" maxlength="20"></label>
-    <p id="pwMsg"></p>
-    <div><button id="pwCancel" class="chip" type="button">나중에</button><button id="pwSubmit" type="submit">바꾸기</button></div>
-  </form>
 </div>
 
 <!-- 캐릭터 꾸미기 -->
