@@ -1,0 +1,649 @@
+﻿<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>홀 인 더 월 · 포즈 게임</title>
+<style>
+  :root{
+    --bg:#0b0a1f; --panel:#17153a; --line:#2f2b6b; --text:#f3f1ff; --dim:#a9a4d6;
+    --cyan:#35e0ff; --pink:#ff4fa3; --yellow:#ffd84a; --green:#3ee686; --red:#ff5a5a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:"Pretendard","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+  button{font:inherit;color:inherit;cursor:pointer;border:0;border-radius:12px;padding:12px 16px;background:#2a2766}
+  button:hover{filter:brightness(1.15)}
+  button:disabled{opacity:.45;cursor:default}
+  .primary{background:linear-gradient(135deg,var(--pink),#8a5bff);font-weight:800}
+  .ghost{background:transparent;border:1px solid var(--line);padding:8px 12px;font-size:14px}
+  .screen{display:none}
+  .screen.on{display:block}
+
+  /* 첫 화면 */
+  #home{max-width:640px;margin:0 auto;padding:28px 18px 60px}
+  h1{font-size:clamp(32px,8vw,54px);margin:10px 0 4px;letter-spacing:-1px;line-height:1.05}
+  h1 span{color:var(--yellow)}
+  .sub{color:var(--dim);margin:0 0 22px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:14px}
+  .card h2{font-size:17px;margin:0 0 10px}
+  ol{margin:0;padding-left:20px;color:var(--dim);line-height:1.75;font-size:15px}
+  ol b{color:var(--text)}
+  .msg{min-height:22px;margin-top:10px;font-size:14px;color:var(--yellow);white-space:pre-line}
+  a{color:var(--cyan)}
+
+  /* 게임 화면 */
+  #main{padding:10px}
+  .wrap{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;align-items:flex-start}
+  .stageBox{position:relative;width:min(calc(100vw - 20px),calc(100dvh - 20px),760px);aspect-ratio:1;
+    border-radius:18px;overflow:hidden;background:#000;border:2px solid var(--line)}
+  #stage{width:100%;height:100%;display:block}
+  #video{position:absolute;width:2px;height:2px;opacity:0;pointer-events:none}
+  .panel{flex:1 1 300px;max-width:430px}
+  body.playing .panel{display:none}
+
+  .hud{position:absolute;left:0;right:0;top:0;padding:10px 12px;display:none;
+    justify-content:space-between;align-items:flex-start;gap:8px;pointer-events:none;
+    background:linear-gradient(#000a,#0000)}
+  body.playing .hud{display:flex}
+  .hud .box{font-weight:800;font-size:clamp(14px,3.4vmin,22px);text-shadow:0 2px 6px #000}
+  .hud small{display:block;font-weight:600;color:var(--dim);font-size:.65em}
+  #hudPose{color:var(--yellow);text-align:center;font-size:clamp(16px,4.6vmin,32px)}
+  #quit{pointer-events:auto;font-size:12px;padding:6px 10px;background:#0009;display:block;margin:6px 0 0 auto}
+  .gauge{position:absolute;left:12px;right:12px;bottom:12px;height:18px;border-radius:9px;background:#000a;
+    border:1px solid #fff5;display:none;overflow:hidden}
+  body.playing .gauge{display:block}
+  #gaugeFill{height:100%;width:0;background:var(--cyan);transition:width .08s linear}
+  #gaugeMark{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--yellow)}
+
+  .result{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:10px;background:#0b0a1fd9;text-align:center;padding:20px}
+  .result.on{display:flex}
+  .result .big{font-size:clamp(40px,12vmin,84px);font-weight:900;color:var(--yellow);line-height:1}
+  .result .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:10px}
+
+  .opts{display:grid;gap:8px;margin-bottom:14px}
+  .opts.c3{grid-template-columns:repeat(3,1fr)}
+  .opts.c2{grid-template-columns:repeat(2,1fr)}
+  .opts button{padding:12px 4px;border:2px solid transparent;line-height:1.3}
+  .opts button b{font-size:20px;display:block}
+  .opts button small{color:var(--dim);font-size:12px}
+  .opts button.sel{border-color:var(--yellow);background:#3a3590}
+  .tools{display:flex;gap:8px;flex-wrap:wrap}
+  .hint{color:var(--dim);font-size:14px;line-height:1.6;margin:0 0 10px}
+</style>
+</head>
+<body>
+
+<!-- ───────── 첫 화면 ───────── -->
+<section id="home" class="screen on">
+  <h1>홀 인 더 <span>월</span></h1>
+  <p class="sub">다가오는 벽의 구멍 모양대로 몸을 맞춰 통과하세요! 카메라가 몸을 바로 인식합니다.</p>
+
+  <div class="card">
+    <button id="load" class="primary" style="width:100%;font-size:18px">카메라 켜고 시작하기</button>
+    <div id="msg" class="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>하는 방법</h2>
+    <ol>
+      <li>카메라에서 <b>2~3걸음</b> 떨어져, 팔을 쭉 뻗어도 화면 안에 들어오게 섭니다.</li>
+      <li>게임을 시작하면 3초 동안 <b>똑바로 서서</b> 몸 크기를 잽니다. 구멍이 내 몸 크기에 맞춰 만들어집니다.</li>
+      <li>벽이 다가오면 <b>구멍 모양대로</b> 포즈를 취합니다. 벽이 닿는 순간 몸이 구멍 안에 있으면 통과!</li>
+      <li>구멍 밖으로 나간 부분은 <b>빨간 점</b>으로 보입니다.</li>
+    </ol>
+  </div>
+  <p class="hint">영상은 기기 안에서만 분석되고 어디에도 전송·저장되지 않습니다. ·
+    <a href="wall-tm.html">티처블 머신 모델로 하는 버전</a></p>
+</section>
+
+<!-- ───────── 준비 + 게임 화면 ───────── -->
+<section id="main" class="screen">
+  <div class="wrap">
+    <div class="stageBox">
+      <canvas id="stage" width="720" height="720"></canvas>
+      <video id="video" playsinline muted></video>
+
+      <div class="hud">
+        <div class="box"><small>점수</small><span id="hudScore">0</span></div>
+        <div class="box" id="hudPose"></div>
+        <div class="box" style="text-align:right"><small id="hudWall">벽 1/8</small><span id="hudLives"></span>
+          <button id="quit">그만하기</button></div>
+      </div>
+      <div class="gauge"><div id="gaugeFill"></div><div id="gaugeMark"></div></div>
+
+      <div id="result" class="result">
+        <div id="resTitle" style="font-size:22px;font-weight:800"></div>
+        <div id="resScore" class="big">0</div>
+        <div id="resInfo" style="color:var(--dim)"></div>
+        <div class="row">
+          <button id="again" class="primary">다시 하기</button>
+          <button id="back">난이도 바꾸기</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="card">
+        <h2>난이도</h2>
+        <div class="opts c3" id="diffs"></div>
+        <h2>몸 범위</h2>
+        <div class="opts c2" id="modes"></div>
+        <button id="start" class="primary" style="width:100%;font-size:18px">게임 시작</button>
+        <div id="msg2" class="msg"></div>
+      </div>
+      <div class="card">
+        <p class="hint">화면에 하늘색 뼈대가 내 몸을 따라오면 준비 완료입니다. 팔을 위·옆으로 뻗어도 화면 안에 들어오는 거리에 서세요.</p>
+        <div class="tools">
+          <button id="flip" class="ghost">카메라 전환</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const S = 384;                       // 포즈 분석용 정사각 이미지 크기
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const lerp = (a,b,t) => a + (b-a)*t;
+const dist = (p,q) => Math.hypot(p[0]-q[0], p[1]-q[1]);
+
+/* 신체 인식 모델 (구글 MediaPipe Pose, 기기 안에서 실행) */
+const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+/* 내부 관절 번호(0 코, 5·6 어깨, 7·8 팔꿈치, 9·10 손목, 11·12 엉덩이, 13·14 무릎, 15·16 발목) ← MediaPipe 번호 */
+const MAP = [0,2,5,7,8,11,12,13,14,15,16,23,24,25,26,27,28];
+
+/* 난이도: 벽이 오는 시간(초), 통과 기준(몸이 구멍 안에 들어간 비율), 구멍 여유, 포즈 단계 */
+const DIFFS = {
+  easy:{label:'하', desc:'천천히 · 넉넉한 구멍', wallTime:7.0, minTime:5.5, thr:0.70, grow:0.055, lv:[1,1], walls:8,  lives:5},
+  mid: {label:'중', desc:'보통',                 wallTime:5.0, minTime:3.6, thr:0.80, grow:0.032, lv:[1,2], walls:10, lives:3},
+  hard:{label:'상', desc:'빠르게 · 딱 맞는 구멍', wallTime:3.6, minTime:2.4, thr:0.88, grow:0.014, lv:[2,3], walls:12, lives:3},
+};
+const MODES = { upper:{label:'상체만', desc:'책상 앞 · 노트북'}, full:{label:'전신', desc:'발끝까지 보일 때'} };
+
+/* 포즈 목록. a = [화면 왼쪽 팔 위팔, 아래팔, 오른쪽 팔 위팔, 아래팔] 각도
+   (0 = 아래로 내림, 90 = 옆으로 수평, 180 = 위로). legs 도 같은 방식(바깥쪽이 +).
+   lean = 몸 기울이기(도), dx = 옆으로 이동(어깨너비 단위), m = 좌우 반대 버전도 만들기, full = 전신 모드 전용 */
+const BASE = [
+  {n:'만세',        lv:1, a:[165,175,165,175]},
+  {n:'T자',         lv:1, a:[90,90,90,90]},
+  {n:'V자',         lv:1, a:[135,135,135,135]},
+  {n:'한 팔 번쩍',  lv:1, a:[170,175,12,8], m:1},
+  {n:'별',          lv:1, a:[135,135,135,135], legs:[25,25,25,25], full:1},
+  {n:'선인장',      lv:2, a:[90,180,90,180]},
+  {n:'허수아비',    lv:2, a:[90,0,90,0]},
+  {n:'신호수',      lv:2, a:[170,175,90,90], m:1},
+  {n:'기울인 T자',  lv:2, a:[90,90,90,90], lean:18, m:1},
+  {n:'옆으로 만세', lv:2, a:[165,175,165,175], dx:0.9, m:1},
+  {n:'다리 벌린 T자', lv:2, a:[90,90,90,90], legs:[30,30,30,30], full:1},
+  {n:'스쿼트',      lv:2, a:[90,90,90,90], legs:[55,-10,55,-10], full:1},
+  {n:'대각선',      lv:3, a:[135,135,45,45], m:1},
+  {n:'이집트',      lv:3, a:[90,180,90,0], m:1},
+  {n:'기울인 선인장', lv:3, a:[90,180,90,180], lean:20, m:1},
+  {n:'옆으로 대각선', lv:3, a:[135,135,45,45], dx:-0.9, m:1},
+  {n:'한 발 들기',  lv:3, a:[90,90,90,90], legs:[3,0,65,-25], full:1, m:1},
+  {n:'스쿼트 만세', lv:3, a:[165,175,165,175], legs:[55,-10,55,-10], full:1},
+];
+const POSES = [];
+for(const p of BASE){
+  const legs = p.legs || [4,0,4,0];
+  POSES.push({...p, legs, lean:p.lean||0, dx:p.dx||0, id:p.n});
+  if(p.m) POSES.push({...p, id:p.n+'·반대', a:[p.a[2],p.a[3],p.a[0],p.a[1]],
+    legs:[legs[2],legs[3],legs[0],legs[1]], lean:-(p.lean||0), dx:-(p.dx||0)});
+}
+
+let landmarker = null, stream = null, facing = 'user', running = false, lastVT = -1;
+let latest = {kps:null}, history = [];
+let diffKey = 'easy', modeKey = 'upper', game = null, view = 'home';
+const video = $('video'), stage = $('stage'), ctx = stage.getContext('2d');
+const crop = document.createElement('canvas'); crop.width = crop.height = S;
+const cctx = crop.getContext('2d');
+
+/* ───────── 소리 ───────── */
+let ac = null;
+function beep(freq, dur=0.12, type='sine', vol=0.15){
+  try{
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + dur);
+    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + dur);
+  }catch(e){}
+}
+function store(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function fetchStore(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
+
+/* ───────── 인식 모델 · 카메라 ───────── */
+async function loadModel(){
+  if(landmarker) return;
+  const v = await import(MP + '/vision_bundle.mjs');
+  const files = await v.FilesetResolver.forVisionTasks(MP + '/wasm');
+  const make = delegate => v.PoseLandmarker.createFromOptions(files, {
+    baseOptions:{modelAssetPath:MODEL, delegate}, runningMode:'VIDEO', numPoses:1});
+  try{ landmarker = await make('GPU'); }catch(e){ landmarker = await make('CPU'); }
+}
+
+async function startCamera(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    throw new Error('이 주소에서는 카메라를 쓸 수 없어요. https:// 로 시작하는 주소(또는 내 컴퓨터의 localhost)에서 열어 주세요.');
+  }
+  if(stream) stream.getTracks().forEach(t => t.stop());
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:facing, width:{ideal:640}, height:{ideal:480}}, audio:false});
+  }catch(e){
+    throw new Error('카메라를 켤 수 없어요. 브라우저의 카메라 권한을 허용했는지 확인해 주세요.');
+  }
+  video.srcObject = stream;
+  await video.play();
+}
+
+async function initAll(){
+  const msg = $('msg');
+  $('load').disabled = true;
+  try{
+    msg.textContent = '신체 인식 프로그램을 불러오는 중… (처음에는 조금 걸려요)';
+    try{ await loadModel(); }
+    catch(e){ console.error(e); throw new Error('신체 인식 프로그램을 받지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.'); }
+    msg.textContent = '카메라를 켜는 중…';
+    await startCamera();
+    msg.textContent = '';
+    show('main');
+    if(!running){ running = true; detectLoop(); }
+  }catch(e){ msg.textContent = e.message; }
+  $('load').disabled = false;
+}
+
+/* 영상 가운데를 정사각형으로 잘라 거울처럼 뒤집어 그린다 */
+function drawVideo(c, size){
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if(!vw) return false;
+  const m = Math.min(vw, vh);
+  c.save(); c.translate(size, 0); c.scale(-1, 1);
+  c.drawImage(video, (vw-m)/2, (vh-m)/2, m, m, 0, 0, size, size);
+  c.restore();
+  return true;
+}
+
+function detectLoop(){
+  if(!running) return;
+  requestAnimationFrame(detectLoop);
+  if(view !== 'main' || video.currentTime === lastVT || !drawVideo(cctx, S)) return;
+  lastVT = video.currentTime;
+  try{
+    const r = landmarker.detectForVideo(crop, performance.now());
+    const lm = r.landmarks && r.landmarks[0];
+    onPose(lm ? MAP.map(i => [lm[i].x, lm[i].y, lm[i].visibility === undefined ? 1 : lm[i].visibility]) : null);
+  }catch(e){ console.error(e); }
+}
+
+/* 새 관절 좌표가 들어올 때마다 */
+function onPose(k){
+  if(k && latest.kps) k = k.map((p,i) => [lerp(latest.kps[i][0],p[0],0.65), lerp(latest.kps[i][1],p[1],0.65), p[2]]);
+  latest = {kps:k};
+  const g = game, now = performance.now();
+  if(!g) return;
+  if(g.phase === 'calib' && k && now - g.t0 > 1500) g.samples.push(k);
+  if(g.phase === 'wall'){
+    const f = k ? fitScore(k, g.wall) : {score:0, bad:[]};
+    g.fit = f.score; g.bad = f.bad;
+    history.push({t:now, fit:f.score});
+    while(history.length && now - history[0].t > 1500) history.shift();
+  }
+}
+
+/* ───────── 몸 크기 재기 ───────── */
+function calibrate(samples, full){
+  if(samples.length < 5) return {err:'몸이 보이지 않아요. 카메라 앞에 서 주세요'};
+  const K = [];
+  for(let i=0;i<17;i++){
+    let x=0,y=0,v=0; for(const s of samples){ x+=s[i][0]; y+=s[i][1]; v+=s[i][2]; }
+    K.push([x/samples.length, y/samples.length, v/samples.length]);
+  }
+  const see = (...ids) => ids.every(i => K[i][2] > 0.5 && K[i][1] < 1.02);
+  if(!see(5,6)) return {err:'어깨가 보이게 서 주세요'};
+  const sw = dist(K[5], K[6]);
+  if(sw < 0.04) return {err:'너무 멀어요. 조금 앞으로 와 주세요'};
+  const shC = [(K[5][0]+K[6][0])/2, (K[5][1]+K[6][1])/2], hipC = [(K[11][0]+K[12][0])/2, (K[11][1]+K[12][1])/2];
+  const m = (val, ok, ratio) => ok ? clamp(val, sw*ratio*0.7, sw*ratio*1.35) : sw*ratio;   // 안 보이면 평균 비율 사용
+  const cal = {
+    cx:shC[0], shY:shC[1], sw,
+    ua:m((dist(K[5],K[7])+dist(K[6],K[8]))/2, see(7,8), 0.83),
+    fa:m((dist(K[7],K[9])+dist(K[8],K[10]))/2, see(7,8,9,10), 0.72),
+    torso:m(dist(shC,hipC), see(11,12), 1.4),
+    hw:m(dist(K[11],K[12]), see(11,12), 0.55),
+    head:m(dist(K[0],shC), K[0][2] > 0.5, 0.55),
+    th:m((dist(K[11],K[13])+dist(K[12],K[14]))/2, see(11,12,13,14), 1.15),
+    sn:m((dist(K[13],K[15])+dist(K[14],K[16]))/2, see(13,14,15,16), 1.1),
+    ground:(K[15][1]+K[16][1])/2, full,
+  };
+  if(full && !(see(15,16) && cal.ground < 1)) return {err:'발끝까지 보이게 뒤로 물러나 주세요'};
+  const reach = cal.ua + cal.fa;
+  if(cal.shY - reach < 0 || cal.cx - sw/2 - reach < -0.02 || cal.cx + sw/2 + reach > 1.02)
+    return {err:'팔 뻗을 공간이 부족해요. 뒤로 물러나 가운데에 서 주세요'};
+  return {cal};
+}
+
+/* 포즈 설명 + 내 몸 치수 → 화면 위 관절 좌표(구멍 모양) */
+function buildPose(p, cal){
+  const rad = d => d*Math.PI/180;
+  const step = (from, len, deg, side) => [from[0] + side*len*Math.sin(rad(deg)), from[1] + len*Math.cos(rad(deg))];
+  const T = cal.torso, k = new Array(17);
+  // 엉덩이 가운데를 (0,0)으로 놓고 만든다. y는 아래쪽이 +
+  k[5] = [-cal.sw/2, -T]; k[6] = [cal.sw/2, -T];
+  k[7] = step(k[5], cal.ua, p.a[0], -1); k[9]  = step(k[7], cal.fa, p.a[1], -1);
+  k[8] = step(k[6], cal.ua, p.a[2],  1); k[10] = step(k[8], cal.fa, p.a[3],  1);
+  k[0] = [0, -T - cal.head];
+  const c = Math.cos(rad(p.lean)), s = Math.sin(rad(p.lean));          // 윗몸 기울이기
+  for(const i of [0,5,6,7,8,9,10]) k[i] = [k[i][0]*c - k[i][1]*s, k[i][0]*s + k[i][1]*c];
+  k[11] = [-cal.hw/2, 0]; k[12] = [cal.hw/2, 0];
+  k[13] = step(k[11], cal.th, p.legs[0], -1); k[15] = step(k[13], cal.sn, p.legs[1], -1);
+  k[14] = step(k[12], cal.th, p.legs[2],  1); k[16] = step(k[14], cal.sn, p.legs[3],  1);
+  // 화면에 놓기: 전신은 발을 바닥에, 상체는 어깨 높이에 맞춘다
+  let ox = cal.cx + p.dx*cal.sw;
+  const oy = cal.full ? cal.ground - Math.max(k[15][1], k[16][1]) : cal.shY + T;
+  const xs = [0,5,6,7,8,9,10].map(i => k[i][0] + ox);
+  const pad = cal.sw*0.3;
+  ox += Math.max(0, pad - Math.min(...xs)) - Math.max(0, Math.max(...xs) - (1 - pad));   // 화면 밖으로 나가지 않게
+  for(let i=0;i<17;i++) if(k[i]) k[i] = [k[i][0]+ox, k[i][1]+oy, 1];
+  for(let i=1;i<5;i++) k[i] = [k[0][0], k[0][1], 0];
+  return k;
+}
+
+/* ───────── 몸 모양 그리기 ───────── */
+const ARMS = [[5,7],[7,9],[6,8],[8,10]], LEGS = [[11,13],[13,15],[12,14],[14,16]];
+const LIMBS = ARMS.concat(LEGS);
+/* pts: [x,y,점수] (0~1 좌표). 현재 색으로 꽉 찬 사람 모양을 그린다. grow 만큼 두껍게 */
+function drawBody(c, pts, size, grow){
+  const P = i => [pts[i][0]*size, pts[i][1]*size];
+  const line = (a,b) => { c.beginPath(); c.moveTo(a[0],a[1]); c.lineTo(b[0],b[1]); c.stroke(); };
+  const ls = P(5), rs = P(6), lh = P(11), rh = P(12);
+  const sh = Math.hypot(ls[0]-rs[0], ls[1]-rs[1]);
+  const w = clamp(sh*0.5, size*0.06, size*0.17) + grow;
+  c.lineCap = 'round'; c.lineJoin = 'round'; c.lineWidth = w;
+  const mid = [(ls[0]+rs[0])/2, (ls[1]+rs[1])/2];
+  c.beginPath(); c.moveTo(ls[0],ls[1]); c.lineTo(rs[0],rs[1]); c.lineTo(rh[0],rh[1]); c.lineTo(lh[0],lh[1]);
+  c.closePath(); c.fill(); c.stroke();
+  for(const [a,b] of LIMBS) line(P(a), P(b));
+  const head = P(0);
+  line(head, mid);
+  c.beginPath(); c.arc(head[0], head[1], clamp(sh*0.42, size*0.05, size*0.14) + grow/2, 0, Math.PI*2); c.fill();
+}
+
+function drawSkeleton(c, pts, size){
+  if(!pts) return;
+  const ok = i => pts[i][2] >= 0.4;
+  const P = i => [pts[i][0]*size, pts[i][1]*size];
+  c.save();
+  c.strokeStyle = '#35e0ff'; c.fillStyle = '#fff'; c.lineWidth = size*0.012; c.lineCap = 'round';
+  c.shadowColor = '#35e0ff'; c.shadowBlur = size*0.02;
+  for(const [a,b] of LIMBS.concat([[5,6],[11,12],[5,11],[6,12]])){
+    if(ok(a) && ok(b)){ const p = P(a), q = P(b); c.beginPath(); c.moveTo(p[0],p[1]); c.lineTo(q[0],q[1]); c.stroke(); }
+  }
+  for(let i=0;i<17;i++){
+    if(i>0 && i<5) continue;
+    if(ok(i)){ const p = P(i); c.beginPath(); c.arc(p[0],p[1], size*(i===0?0.02:0.011), 0, Math.PI*2); c.fill(); }
+  }
+  c.restore();
+}
+
+/* 벽 한 장을 미리 그려 두고, 구멍 위치(투명한 곳)를 기억해 둔다 */
+function buildWall(pts, grow){
+  const W = 512, c = document.createElement('canvas'); c.width = c.height = W;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0,0,W,W);
+  g.addColorStop(0,'#ff4fa3'); g.addColorStop(1,'#7a4dff');
+  x.fillStyle = g; x.fillRect(0,0,W,W);
+  x.strokeStyle = 'rgba(255,255,255,.22)'; x.lineWidth = 2;        // 벽돌 무늬
+  const bh = W/12;
+  for(let r=0;r<12;r++){
+    x.beginPath(); x.moveTo(0,r*bh); x.lineTo(W,r*bh); x.stroke();
+    for(let k=0;k<=6;k++){ const bx = k*W/6 + (r%2 ? W/12 : 0); x.beginPath(); x.moveTo(bx,r*bh); x.lineTo(bx,(r+1)*bh); x.stroke(); }
+  }
+  x.strokeStyle = '#ffd84a'; x.lineWidth = 10; x.strokeRect(5,5,W-10,W-10);
+  x.fillStyle = x.strokeStyle = '#fff3b0'; drawBody(x, pts, W, W*(grow + 0.03));   // 구멍 테두리
+  x.globalCompositeOperation = 'destination-out';
+  x.fillStyle = x.strokeStyle = '#000'; drawBody(x, pts, W, W*grow);               // 구멍 뚫기
+  x.globalCompositeOperation = 'source-over';
+  // 판정용: 구멍의 관절 위치와, 구멍 가운데선에서 벗어나도 되는 거리(= 구멍 굵기의 절반)
+  const sw = dist(pts[5], pts[6]);
+  return {canvas:c, tpl:pts, tol:clamp(sw*0.5, 0.06, 0.17)/2 + grow/2, headTol:clamp(sw*0.42, 0.05, 0.14) + grow/2};
+}
+
+/* 내 몸의 여러 지점이 구멍 안에 들어간 비율(0~1)과, 밖으로 나간 지점들 */
+function fitScore(k, wall){
+  // 인식 모델이 좌우를 바꿔 부를 수 있으므로 두 가지로 재서 더 잘 맞는 쪽을 쓴다
+  const a = fitOne(k, wall), b = fitOne(SWAP.map(i => k[i]), wall);
+  return a.score >= b.score ? a : b;
+}
+const SWAP = [0,2,1,4,3,6,5,8,7,10,9,12,11,14,13,16,15];
+function fitOne(k, wall){
+  const T = wall.tpl;
+  // 팔다리 위의 같은 지점끼리 비교: 내 팔의 한 점이 구멍 속 '그 팔 자리'에 있어야 한다
+  const limb = (i, j, ts) => ts.map(t => [[lerp(k[i][0],k[j][0],t), lerp(k[i][1],k[j][1],t)],
+                                          [lerp(T[i][0],T[j][0],t), lerp(T[i][1],T[j][1],t)], wall.tol]);
+  const mid = (P, i, j) => [(P[i][0]+P[j][0])/2, (P[i][1]+P[j][1])/2];
+  const groups = [
+    limb(5,7,[0.34,0.67,1]).concat(limb(7,9,[0.34,0.67,1])),
+    limb(6,8,[0.34,0.67,1]).concat(limb(8,10,[0.34,0.67,1])),
+    [[k[0],T[0],wall.headTol], [k[0],T[0],wall.headTol], [k[5],T[5],wall.tol], [k[6],T[6],wall.tol]],
+  ];
+  if(wall.full){
+    groups[2].push([mid(k,11,12), mid(T,11,12), wall.tol]);
+    groups.push(limb(11,13,[0.5,1]).concat(limb(13,15,[0.5,1])));
+    groups.push(limb(12,14,[0.5,1]).concat(limb(14,16,[0.5,1])));
+  }
+  let inside = 0, total = 0, worst = 1; const bad = [];
+  for(const pts of groups){
+    let n = 0;
+    for(const [p, q, tol] of pts){ if(dist(p, q) <= tol) n++; else bad.push(p); }
+    inside += n; total += pts.length; worst = Math.min(worst, n/pts.length);
+  }
+  // 전체 평균과 가장 많이 벗어난 부위를 반씩 반영: 한쪽 팔만 틀려도 통과하지 못한다
+  return {score:0.5*inside/total + 0.5*worst, bad};
+}
+
+/* ───────── 준비 화면 UI ───────── */
+function show(v){
+  view = v;
+  $('home').classList.toggle('on', v === 'home');
+  $('main').classList.toggle('on', v === 'main');
+  if(v === 'main') resize();
+}
+
+function buildOpts(boxId, table, current, pick){
+  const box = $(boxId); box.textContent = '';
+  for(const k in table){
+    const b = document.createElement('button');
+    const big = document.createElement('b'); big.textContent = table[k].label;
+    const sm = document.createElement('small'); sm.textContent = table[k].desc;
+    b.append(big, sm);
+    b.classList.toggle('sel', k === current());
+    b.onclick = () => { pick(k); buildOpts(boxId, table, current, pick); };
+    box.append(b);
+  }
+}
+
+/* ───────── 게임 진행 ───────── */
+function startGame(){
+  const d = DIFFS[diffKey], full = modeKey === 'full';
+  const pool = POSES.filter(p => p.lv >= d.lv[0] && p.lv <= d.lv[1] && (full || !p.full));
+  game = {d, full, pool, idx:0, score:0, lives:d.lives, combo:0, passed:0, last:'',
+          phase:'calib', t0:performance.now(), samples:[], cal:null, wall:null, fx:null, tick:-1, fit:0, bad:[]};
+  document.body.classList.add('playing');
+  $('result').classList.remove('on');
+  $('gaugeMark').style.left = (d.thr*100) + '%';
+  $('gaugeFill').style.width = '0%';
+  $('hudPose').textContent = '똑바로 서 주세요';
+  updateHud(); resize(); beep(440, 0.1);
+}
+
+function updateHud(){
+  $('hudScore').textContent = game.score;
+  $('hudWall').textContent = '벽 ' + Math.min(game.idx+1, game.d.walls) + '/' + game.d.walls;
+  $('hudLives').textContent = '♥'.repeat(Math.max(0, game.lives)) + '♡'.repeat(game.d.lives - Math.max(0, game.lives));
+}
+
+function nextWall(now){
+  const g = game;
+  let p;
+  do { p = g.pool[Math.floor(Math.random()*g.pool.length)]; } while(g.pool.length > 1 && p.id === g.last);
+  g.last = p.id;
+  const prog = g.d.walls > 1 ? g.idx/(g.d.walls-1) : 0;      // 뒤로 갈수록 조금씩 빨라진다
+  const w = buildWall(buildPose(p, g.cal), g.d.grow);
+  g.wall = {...w, full:g.full, name:p.n, start:now, dur:lerp(g.d.wallTime, g.d.minTime, prog)*1000};
+  g.phase = 'wall'; g.fx = null; g.fit = 0; g.bad = []; history = [];
+  $('hudPose').textContent = p.n;
+  updateHud();
+}
+
+/* 벽이 도착한 순간: 최근 0.4초 동안 몸이 구멍에 들어가 있던 비율의 평균으로 판정 */
+function judge(now){
+  const g = game;
+  const recent = history.filter(h => now - h.t <= 400);
+  const p = recent.length ? recent.reduce((s,h) => s + h.fit, 0)/recent.length : g.fit;
+  const pass = p >= g.d.thr;
+  if(pass){
+    g.combo++; g.passed++;
+    g.score += Math.round(p*100) + (g.combo-1)*10;
+    beep(660, 0.1); setTimeout(() => beep(990, 0.18), 90);
+  }else{
+    g.combo = 0; g.lives--;
+    beep(110, 0.35, 'sawtooth', 0.2);
+  }
+  g.fx = {pass, t0:now, combo:g.combo};
+  g.phase = 'after'; g.idx++;
+  updateHud();
+}
+
+function finish(){
+  const g = game, key = 'hitw-best:' + diffKey + ':' + modeKey;
+  const best = Math.max(fetchStore(key) || 0, g.score); store(key, best);
+  $('resTitle').textContent = (g.lives > 0 ? '모든 벽 통과!' : '게임 끝') + ' (난이도 ' + g.d.label + ')';
+  $('resScore').textContent = g.score + '점';
+  $('resInfo').textContent = '통과한 벽 ' + g.passed + ' / ' + g.d.walls + ' · 최고 기록 ' + best + '점';
+  $('result').classList.add('on');
+  g.phase = 'done';
+}
+
+function endGame(){
+  game = null; document.body.classList.remove('playing');
+  $('result').classList.remove('on'); resize();
+}
+
+/* ───────── 화면 그리기 ───────── */
+function resize(){
+  const w = stage.clientWidth; if(!w) return;
+  const px = Math.min(900, Math.round(w * (window.devicePixelRatio || 1)));
+  if(stage.width !== px){ stage.width = stage.height = px; }
+}
+window.addEventListener('resize', resize);
+
+function bigText(txt, color, Z, scale){
+  ctx.save();
+  ctx.font = '900 ' + Math.round(Z*scale) + 'px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = Z*0.02; ctx.strokeStyle = '#0b0a1f'; ctx.fillStyle = color;
+  ctx.strokeText(txt, Z/2, Z/2); ctx.fillText(txt, Z/2, Z/2);
+  ctx.restore();
+}
+
+function render(now){
+  requestAnimationFrame(render);
+  if(view !== 'main') return;
+  const Z = stage.width, g = game;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.globalAlpha = 1;
+  if(g && g.fx && !g.fx.pass){                       // 부딪히면 화면 흔들기
+    const u = (now - g.fx.t0)/400;
+    if(u < 1) ctx.translate((Math.random()-0.5)*Z*0.04*(1-u), (Math.random()-0.5)*Z*0.04*(1-u));
+  }
+  if(!drawVideo(ctx, Z)){ ctx.fillStyle = '#0b0a1f'; ctx.fillRect(0,0,Z,Z); }
+  ctx.fillStyle = 'rgba(11,10,31,.3)'; ctx.fillRect(0,0,Z,Z);
+
+  // 복도 느낌: 멀리서 다가오는 네모 틀
+  ctx.strokeStyle = 'rgba(53,224,255,.35)'; ctx.lineWidth = Math.max(1, Z*0.004);
+  for(let k=0;k<5;k++){
+    const tt = ((now/1800) + k/5) % 1, s = Z/(7 - 6*tt);
+    ctx.globalAlpha = 0.25 + 0.6*tt;
+    ctx.strokeRect((Z-s)/2, (Z-s)/2, s, s);
+  }
+  ctx.globalAlpha = 1;
+
+  let wallT = 0;
+  if(g){
+    if(g.phase === 'calib'){
+      const el = (now - g.t0)/1000, n = 3 - Math.floor(el);
+      if(el >= 0 && n !== g.tick && n > 0){ g.tick = n; beep(520, 0.08); }
+      if(el >= 3){
+        const r = calibrate(g.samples, g.full);
+        if(r.cal){ g.cal = r.cal; nextWall(now); }
+        else{ $('hudPose').textContent = r.err; g.samples = []; g.tick = -1; g.t0 = now + 1800; beep(200, 0.2, 'square', 0.08); }
+      }else if(el >= 0 && el < 0.1) $('hudPose').textContent = '똑바로 서 주세요';
+    }else if(g.phase === 'wall'){
+      if((now - g.wall.start)/g.wall.dur >= 1) judge(now);
+    }else if(g.phase === 'after'){
+      if(now - g.fx.t0 > 1100){
+        if(g.lives <= 0 || g.idx >= g.d.walls) finish(); else nextWall(now);
+      }
+    }
+
+    // 벽
+    if(g.wall && (g.phase === 'wall' || g.phase === 'after')){
+      wallT = clamp((now - g.wall.start)/g.wall.dur, 0, 1);
+      let s = 1/(7 - 6*wallT), a = Math.min(0.94, 0.55 + 0.6*wallT);
+      if(g.phase === 'after' && g.fx.pass){
+        const u = clamp((now - g.fx.t0)/600, 0, 1);
+        s = 1 + u*0.9; a = 0.94*(1-u);
+      }
+      ctx.globalAlpha = a;
+      ctx.drawImage(g.wall.canvas, (Z - Z*s)/2, (Z - Z*s)/2, Z*s, Z*s);
+      ctx.globalAlpha = 1;
+    }
+    if(g.phase === 'wall'){
+      $('gaugeFill').style.width = Math.round(g.fit*100) + '%';
+      $('gaugeFill').style.background = g.fit >= g.d.thr ? '#3ee686' : '#35e0ff';
+    }
+  }
+
+  drawSkeleton(ctx, latest.kps, Z);
+
+  if(g){
+    if(g.phase === 'wall' && wallT > 0.3){            // 구멍 밖으로 나간 곳 표시
+      ctx.fillStyle = '#ff3b3b'; ctx.strokeStyle = '#fff'; ctx.lineWidth = Z*0.004;
+      for(const p of g.bad){ ctx.beginPath(); ctx.arc(p[0]*Z, p[1]*Z, Z*0.014, 0, Math.PI*2); ctx.fill(); ctx.stroke(); }
+    }
+    if(g.phase === 'calib'){
+      const el = (now - g.t0)/1000, n = 3 - Math.floor(el);
+      if(el >= 0 && n > 0) bigText(String(n), '#ffd84a', Z, 0.32);
+    }else if(g.phase === 'after'){
+      const u = (now - g.fx.t0)/1100;
+      ctx.fillStyle = g.fx.pass ? 'rgba(62,230,134,' + 0.35*(1-u) + ')' : 'rgba(255,60,60,' + 0.45*(1-u) + ')';
+      ctx.fillRect(-Z*0.1, -Z*0.1, Z*1.2, Z*1.2);
+      bigText(g.fx.pass ? (g.fx.combo > 1 ? g.fx.combo + '연속 통과!' : '통과!') : '쾅!',
+              g.fx.pass ? '#3ee686' : '#ff5a5a', Z, g.fx.pass && g.fx.combo > 1 ? 0.13 : 0.2);
+    }
+  }
+}
+
+/* ───────── 버튼 연결 ───────── */
+$('load').onclick = initAll;
+$('start').onclick = startGame;
+$('again').onclick = startGame;
+$('back').onclick = endGame;
+$('quit').onclick = endGame;
+$('flip').onclick = async () => {
+  facing = facing === 'user' ? 'environment' : 'user';
+  try{ await startCamera(); $('msg2').textContent = ''; }catch(e){ $('msg2').textContent = e.message; }
+};
+buildOpts('diffs', DIFFS, () => diffKey, k => { diffKey = k; });
+buildOpts('modes', MODES, () => modeKey, k => { modeKey = k; });
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
