@@ -58,7 +58,19 @@
   .ans.sel{transform:translateY(-3px) scale(1.03);background:#fff;box-shadow:0 0 0 3px #fff, 0 0 22px 4px var(--c)}
   .stageBox{position:relative;width:100%;aspect-ratio:16/9;border-radius:18px;overflow:hidden;background:#000;border:2px solid var(--line)}
   #stage{width:100%;height:100%;display:block}
-  #video{position:absolute;width:2px;height:2px;opacity:0;pointer-events:none}
+  /* 카메라에 비친 실제 모습 (인식되면 초록 테두리, 안 되면 빨강) */
+  .cam{position:absolute;right:10px;bottom:10px;height:40%;aspect-ratio:4/3;border-radius:14px;overflow:hidden;
+    border:4px solid var(--red);background:#000;z-index:3;display:none;transition:height .25s,right .25s,bottom .25s}
+  .cam.on{display:block}
+  .cam.ok{border-color:var(--green)}
+  .cam.big{right:50%;bottom:50%;transform:translate(50%,50%);height:84%}
+  #video{width:100%;height:100%;display:block;object-fit:fill;transform:scaleX(-1)}
+  .cam canvas{position:absolute;inset:0;width:100%;height:100%}
+  #camMsg{position:absolute;left:0;right:0;bottom:0;padding:3px 6px;text-align:center;font-weight:800;
+    font-size:clamp(11px,1.6vw,17px);color:#111;background:var(--red)}
+  .cam.ok #camMsg{background:var(--green)}
+  .cam.big #camMsg{font-size:clamp(14px,2.4vw,24px);padding:6px}
+  #hTime.warn{color:var(--red)}
   .bars{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;margin-top:8px;font-size:13px;color:var(--dim)}
   .bar{height:12px;border-radius:6px;background:#0e0d28;border:1px solid var(--line);overflow:hidden}
   .bar i{display:block;height:100%;width:0}
@@ -104,11 +116,12 @@
     <div class="card">
       <h2>하는 방법</h2>
       <ol>
-        <li>카메라에서 <b>2~3걸음</b> 떨어져 가운데에 섭니다. 무릎까지 보이면 더 잘 인식됩니다.</li>
+        <li>카메라에서 <b>2~3걸음</b> 떨어져 가운데에 섭니다. 무릎까지 보이면 더 잘 인식됩니다. 화면 구석의 <b>내 모습</b> 테두리가 초록색이면 인식된 것입니다.</li>
         <li>팔을 흔들고 무릎을 올리며 <b>제자리 달리기</b>를 하면 앞으로 나아갑니다. 멈추면 캐릭터도 멈춥니다.</li>
         <li><b>옆으로 한 걸음</b> 옮기면 왼쪽·오른쪽 문, 가운데에 서면 가운데 문을 고릅니다.</li>
         <li>틀린 문으로 들어가면 <b>함정</b>이 튀어나와 생명이 줄고 시간도 늦어집니다. 생명이 다 떨어지면 탈락!</li>
-        <li>모두 끝나면 <b>걸린 시간</b>으로 순위를 정하고, 그때 정답을 공개합니다.</li>
+        <li><b>제한 시간</b>이 끝나면 그 자리에서 차례가 끝납니다.</li>
+        <li>순위는 <b>많이 맞힌 사람</b>이 먼저, 맞힌 수가 같으면 <b>더 빨리 끝낸 사람</b>이 앞섭니다. 정답은 모두 끝난 뒤에 공개합니다.</li>
       </ol>
     </div>
     <p class="hint">영상은 기기 안에서만 분석되고 어디에도 전송·저장되지 않습니다. · 키보드 연습: 스페이스 = 달리기, ← → = 문 고르기 ·
@@ -139,13 +152,14 @@
         <div><label for="sN">한 사람당 문제 수</label><input id="sN" type="number" min="1" max="50"></div>
         <div><label for="sP">참가자 수</label><input id="sP" type="number" min="1" max="40"></div>
         <div><label for="sL">생명 수</label><input id="sL" type="number" min="1" max="9"></div>
+        <div><label for="sT">한 사람당 제한 시간(초)</label><input id="sT" type="number" min="0" max="900"></div>
         <div><label for="sD">문까지 달리는 거리</label>
           <select id="sD"><option value="short">짧게 (약 3초)</option><option value="mid">보통 (약 5초)</option><option value="long">길게 (약 8초)</option></select></div>
         <div><label for="sS">달리기 인식</label>
           <select id="sS"><option value="high">민감하게 (살살 뛰어도 감)</option><option value="mid">보통</option><option value="low">둔하게 (힘껏 뛰어야 감)</option></select></div>
       </div>
       <label class="check"><input id="sR" type="checkbox"> 문제은행에서 무작위로 뽑기 (참가자마다 다른 문제)</label>
-      <p class="hint">끄면 위에서부터 차례로, 모든 참가자에게 같은 문제가 나옵니다.</p>
+      <p class="hint">끄면 위에서부터 차례로, 모든 참가자에게 같은 문제가 나옵니다. · 제한 시간에 0을 넣으면 시간 제한 없이 진행합니다.</p>
 
       <label for="sNames">참가자 이름 (선택) — 한 줄에 한 명</label>
       <textarea id="sNames" style="min-height:90px" placeholder="비워 두면 1번, 2번, 3번… 으로 표시됩니다"></textarea>
@@ -165,7 +179,7 @@
     <div><span id="hName"></span></div>
     <div><small>문제</small><span id="hQ"></span></div>
     <div id="hLives"></div>
-    <div><small>시간</small><span id="hTime">0.0초</span></div>
+    <div><small id="hTimeL">시간</small><span id="hTime">0.0초</span></div>
     <button id="quit" class="ghost">처음으로</button>
   </div>
   <div id="question"></div>
@@ -176,7 +190,7 @@
   </div>
   <div class="stageBox">
     <canvas id="stage" width="960" height="540"></canvas>
-    <video id="video" playsinline muted></video>
+    <div id="cam" class="cam"><video id="video" playsinline muted></video><canvas id="camCv"></canvas><div id="camMsg"></div></div>
     <div id="ov" class="ov"></div>
   </div>
   <div class="bars">
@@ -210,7 +224,7 @@ const DEF_BANK = [
   '작은 점을 찍어 그리는 표현 방법은? | 점묘법 | 콜라주 | 판화',
   '종이나 천을 오려 붙여 표현하는 방법은? | 콜라주 | 소묘 | 수채화',
 ].join('\n');
-const DEFAULT = {bankText:DEF_BANK, count:5, players:4, names:'', random:true, lives:3, dist:'mid', sens:'mid'};
+const DEFAULT = {bankText:DEF_BANK, count:5, players:4, names:'', random:true, lives:3, limit:60, dist:'mid', sens:'mid'};
 const DIST = {short:3, mid:5, long:8};                          // 전속력으로 문까지 걸리는 시간(초)
 const SENS = {high:[0.12,0.3], mid:[0.15,0.45], low:[0.2,0.7]};  // [이 아래는 안 뛴 것으로 봄, 이 이상이면 전속력] (오르내린 폭, 어깨너비 단위)
 const TRACK = 100, K = 12;                                      // 문까지의 거리, 원근감 세기
@@ -327,10 +341,10 @@ function show(v){
 function refreshInfo(){
   const bank = parseBank(cfg.bankText), n = Math.min(cfg.count, bank.length);
   $('info').textContent = '문제은행 ' + bank.length + '문제 · 한 사람당 ' + n + '문제' + (cfg.random ? '(무작위)' : '(순서대로)') +
-    ' · 참가자 ' + cfg.players + '명 · 생명 ' + cfg.lives + '개';
+    ' · 참가자 ' + cfg.players + '명 · 생명 ' + cfg.lives + '개 · ' + (cfg.limit ? '제한 시간 ' + cfg.limit + '초' : '시간 제한 없음');
 }
 function openSettings(){
-  $('sBank').value = cfg.bankText; $('sN').value = cfg.count; $('sP').value = cfg.players; $('sL').value = cfg.lives;
+  $('sBank').value = cfg.bankText; $('sN').value = cfg.count; $('sP').value = cfg.players; $('sL').value = cfg.lives; $('sT').value = cfg.limit;
   $('sD').value = cfg.dist; $('sS').value = cfg.sens; $('sR').checked = cfg.random; $('sNames').value = cfg.names;
   $('msgS').textContent = ''; countBank(); show('settings');
 }
@@ -387,6 +401,7 @@ function saveSettings(){
   if(!bank.length){ $('msgS').textContent = '문제를 한 개 이상 넣어 주세요. 형식: 문제 | 정답 | 오답 | 오답'; return; }
   const num = (id, lo, hi, def) => clamp(Math.round(+$(id).value) || def, lo, hi);
   cfg = {bankText:$('sBank').value, count:Math.min(num('sN',1,50,5), bank.length), players:num('sP',1,40,4), lives:num('sL',1,9,3),
+         limit:$('sT').value.trim() === '' ? 60 : clamp(Math.round(+$('sT').value) || 0, 0, 900),
          dist:$('sD').value, sens:$('sS').value, random:$('sR').checked, names:$('sNames').value};
   store('quizrun-config', cfg);
   show('home');
@@ -416,7 +431,7 @@ async function begin(useKeyboard){
          name:names[i] || (i+1) + '번', named:!!names[i],
          // order[문 번호] = 그 문에 적힌 답의 번호(0 이 정답)
          qs:(cfg.random ? shuffle(all).slice(0, n) : all.slice(0, n)).map(qi => ({qi, order:shuffle([0,1,2])})),
-         qi:0, lives:cfg.lives, time:0, right:0, done:false, out:false}))};
+         qi:0, lives:cfg.lives, time:0, right:0, done:false, out:false, timeout:false}))};
   show('main');
   introPlayer();
 }
@@ -434,7 +449,21 @@ function hud(){
   $('hName').textContent = P.name + ' (' + (S.cur+1) + '/' + S.players.length + ')';
   $('hQ').textContent = Math.min(P.qi+1, S.n) + '/' + S.n;
   $('hLives').textContent = '♥'.repeat(Math.max(0, P.lives)) + '♡'.repeat(cfg.lives - Math.max(0, P.lives));
-  $('hTime').textContent = secs(P.time);
+  showTime(P);
+}
+/* 제한 시간이 있으면 남은 시간을, 없으면 걸린 시간을 보여 준다 */
+function showTime(P){
+  const left = cfg.limit ? Math.max(0, cfg.limit - P.time) : 0;
+  $('hTimeL').textContent = cfg.limit ? '남은 시간' : '시간';
+  $('hTime').textContent = secs(cfg.limit ? left : P.time);
+  $('hTime').classList.toggle('warn', !!cfg.limit && left <= 10);
+}
+function timeUp(){
+  const P = S.players[S.cur];
+  P.time = cfg.limit;
+  if(P.lives <= 0) P.out = true; else P.timeout = true;
+  beep(300, 0.5, 'square', 0.12);
+  endPlayer();
 }
 function showQuestion(on){
   const P = S.players[S.cur], q = on ? P.qs[P.qi] : null;
@@ -489,26 +518,26 @@ function endPlayer(){
   const P = S.players[S.cur], last = S.cur === S.players.length - 1;
   S.phase = 'pdone'; hud(); showQuestion(false);
   overlay([
-    el('h2', P.out ? P.name + ' 탈락!' : P.name + ' 완주!'),
-    el('div', P.out ? '생명이 모두 떨어졌어요' : secs(P.time), 'big'),
-    el('p', (P.out ? '' : '남은 생명 ' + '♥'.repeat(P.lives) + ' · ') + '정답은 모두 끝난 뒤에 공개됩니다.'),
+    el('h2', P.name + (P.out ? ' 탈락!' : P.timeout ? ' 시간 종료!' : ' 완주!')),
+    el('div', '맞힌 문제 ' + P.right + '/' + S.n, 'big'),
+    el('p', (P.out ? '생명이 모두 떨어졌어요 · ' : '') + '걸린 시간 ' + secs(P.time) + ' · 정답은 모두 끝난 뒤에 공개됩니다.'),
     button(last ? '최종 결과 보기' : '다음 참가자', () => { if(last) showFinal(); else { S.cur++; introPlayer(); } }),
   ]);
 }
 
-/* 순위: 완주한 사람은 시간이 짧은 순, 탈락한 사람은 그 뒤에 맞힌 문제가 많은 순 */
+/* 순위: 많이 맞힌 사람이 먼저, 맞힌 수가 같으면 더 빨리 끝낸 사람이 앞선다 */
 function ranking(){
-  return S.players.slice().sort((a, b) => (a.out - b.out) || (a.out ? b.right - a.right || a.time - b.time : a.time - b.time || b.lives - a.lives));
+  return S.players.slice().sort((a, b) => (b.right - a.right) || (a.time - b.time) || (b.lives - a.lives));
 }
 function showFinal(){
   S.phase = 'final'; showQuestion(false); $('question').textContent = '최종 결과';
   const t = el('table'), head = el('tr');
-  for(const h of ['순위','이름','시간','맞힌 문제','남은 생명']) head.append(el('th', h));
+  for(const h of ['순위','이름','맞힌 문제','걸린 시간','결과']) head.append(el('th', h));
   t.append(head);
   ranking().forEach((P, i) => {
     const r = el('tr', undefined, i === 0 ? 'first' : '');
-    r.append(el('td', (i+1) + '위'), el('td', P.name, 'l'), el('td', P.out ? '탈락' : secs(P.time)),
-             el('td', P.right + '/' + S.n), el('td', P.out ? '-' : '♥'.repeat(P.lives)));
+    r.append(el('td', (i+1) + '위'), el('td', P.name, 'l'), el('td', P.right + '/' + S.n), el('td', secs(P.time)),
+             el('td', P.out ? '탈락' : P.timeout ? '시간 종료' : '완주'));
     t.append(r);
   });
   const used = [...new Set(S.players.flatMap(P => P.qs.map(q => q.qi)))].sort((a, b) => a - b);
@@ -564,6 +593,37 @@ function drawRunner(x, W, H){
   ctx.restore();
 }
 
+/* 카메라에 비친 실제 모습 + 인식된 뼈대. 준비(위치 확인) 때는 크게, 달릴 때는 구석에 작게 */
+const camBox = $('cam'), camCv = $('camCv'), camCtx = camCv.getContext('2d');
+function drawCam(now){
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const on = !kbd && !!vw && ['intro','calib','run','fx'].includes(S.phase);
+  camBox.classList.toggle('on', on);
+  if(!on) return;
+  const ok = !!latest && now - prevT < 600, calib = S.phase === 'calib';
+  camBox.classList.toggle('ok', ok); camBox.classList.toggle('big', calib);
+  camBox.style.aspectRatio = vw + ' / ' + vh;
+  const msg = calib ? S.calMsg : ok ? '인식됨' : '몸이 안 보여요';
+  if($('camMsg').textContent !== msg) $('camMsg').textContent = msg;
+  const ch = 360, cw = Math.round(ch*vw/vh);
+  if(camCv.width !== cw || camCv.height !== ch){ camCv.width = cw; camCv.height = ch; }
+  camCtx.clearRect(0, 0, cw, ch);
+  if(ok){
+    const k = latest, pt = i => [k[i][0]*ch, k[i][1]*ch];     // x 는 이미 화면 비율이 곱해져 있다
+    camCtx.strokeStyle = '#3ee686'; camCtx.fillStyle = '#fff'; camCtx.lineWidth = 5; camCtx.lineCap = 'round';
+    for(const [a,b] of BONES) if(k[a][2] > 0.4 && k[b][2] > 0.4){ const p = pt(a), q = pt(b); camCtx.beginPath(); camCtx.moveTo(p[0],p[1]); camCtx.lineTo(q[0],q[1]); camCtx.stroke(); }
+    for(const i of [0,5,6,7,8,9,10,11,12,13,14,15,16]) if(k[i][2] > 0.4){ const p = pt(i); camCtx.beginPath(); camCtx.arc(p[0], p[1], i ? 5 : 9, 0, Math.PI*2); camCtx.fill(); }
+  }
+  if(calib){
+    const n = 3 - Math.floor((now - S.t0)/1000);
+    if(now >= S.t0 && n > 0){
+      camCtx.font = '900 150px sans-serif'; camCtx.textAlign = 'center'; camCtx.textBaseline = 'middle';
+      camCtx.lineWidth = 10; camCtx.strokeStyle = '#0b0a1f'; camCtx.fillStyle = '#ffd84a';
+      camCtx.strokeText(String(n), cw/2, ch*0.42); camCtx.fillText(String(n), cw/2, ch*0.42);
+    }
+  }
+}
+
 let lastFrame = 0, shownLane = -1;
 function render(now){
   requestAnimationFrame(render);
@@ -590,15 +650,15 @@ function render(now){
     P.time += dt;
     const step = run * (TRACK/DIST[cfg.dist]) * dt;
     S.remaining -= step; S.traveled += step; stride += run*dt*13;
-    if(S.remaining <= 0) arrive();
+    if(cfg.limit && P.time >= cfg.limit) timeUp(); else if(S.remaining <= 0) arrive();
   }else if(S.phase === 'fx'){
     if(!S.fx.ok) P.time += dt;                                // 함정에 걸린 동안에도 시간이 흐른다
     S.fx.t += dt;
-    if(S.fx.t >= S.fx.dur) afterDoor();
+    if(cfg.limit && P.time >= cfg.limit) timeUp(); else if(S.fx.t >= S.fx.dur) afterDoor();
   }
 
   // 위쪽 표시
-  $('hTime').textContent = secs(P.time);
+  showTime(P); drawCam(now);
   $('runBar').style.width = Math.round(run*100) + '%';
   $('goBar').style.width = Math.round((1 - clamp(S.remaining/TRACK, 0, 1))*100) + '%';
   if(shownLane !== lane){ shownLane = lane; for(let d=0; d<3; d++) $('a'+d).classList.toggle('sel', d === lane); }
@@ -662,12 +722,7 @@ function render(now){
     ctx.fillStyle = 'rgba(255,255,255,' + 0.5*(1 - fx.t/fx.dur) + ')'; ctx.fillRect(0, 0, W, H);
     bigText('통과!', '#3ee686', W, H, 0.22);
   }
-  if(S.phase === 'calib'){
-    const t = (now - S.t0)/1000, n = 3 - Math.floor(t);
-    if(t >= 0 && n > 0) bigText(String(n), '#ffd84a', W, H, 0.34);
-    ctx.font = '700 ' + Math.round(H*0.05) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
-    ctx.fillText(S.calMsg, W/2, H*0.12);
-  }else if(S.phase === 'run' && !kbd && !latest){
+  if(S.phase === 'run' && !kbd && !latest){
     ctx.font = '700 ' + Math.round(H*0.05) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd84a';
     ctx.fillText('몸이 보이지 않아요', W/2, H*0.12);
   }
