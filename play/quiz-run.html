@@ -124,6 +124,14 @@
       <p class="hint" style="margin-top:0">형식: <b>문제 | 정답 | 오답 | 오답</b> (첫 번째 답이 정답입니다. 문의 위치는 게임에서 매번 섞입니다.)</p>
       <textarea id="sBank" spellcheck="false"></textarea>
       <div id="sCount" class="hint"></div>
+      <div class="btns">
+        <button id="xlsDown" type="button">엑셀 양식 받기</button>
+        <button id="xlsUp" type="button">엑셀 파일 올리기</button>
+        <input id="xlsFile" type="file" accept=".xlsx,.xls,.csv" hidden>
+      </div>
+      <p class="hint">양식의 A열에 문제, B열에 정답, C·D열에 오답을 한 줄에 한 문제씩 적어 올리면 위 칸의 문제가 그 파일 내용으로 바뀝니다.
+        양식에는 지금 위 칸에 있는 문제가 들어 있습니다. ·
+        <a href="퀴즈달리기_예시문제_조형요소와원리.xlsx" download>예시 파일 받기 (조형 요소와 원리 28문제)</a></p>
 
       <div class="grid2">
         <div><label for="sN">한 사람당 문제 수</label><input id="sN" type="number" min="1" max="50"></div>
@@ -328,6 +336,50 @@ function countBank(){
   const lines = $('sBank').value.split('\n').filter(l => l.trim()).length, ok = parseBank($('sBank').value).length;
   $('sCount').textContent = '인식된 문제 ' + ok + '개' + (lines > ok ? ' · 형식이 맞지 않는 줄 ' + (lines - ok) + '개 (| 로 네 칸을 나눠 주세요)' : '');
 }
+/* ───────── 엑셀로 문제 주고받기 (엑셀을 읽고 쓰는 도구는 버튼을 누를 때 받아 온다) ───────── */
+const XLSX_URL = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+let xlsxWait = null;
+function loadXLSX(){
+  if(window.XLSX) return Promise.resolve();
+  return xlsxWait = xlsxWait || new Promise((ok, fail) => {
+    const s = document.createElement('script'); s.src = XLSX_URL; s.onload = ok;
+    s.onerror = () => { xlsxWait = null; fail(new Error('엑셀 도구를 받지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.')); };
+    document.head.append(s);
+  });
+}
+async function downloadTemplate(){
+  try{
+    await loadXLSX();
+    let bank = parseBank($('sBank').value); if(!bank.length) bank = parseBank(DEF_BANK);
+    const ws = XLSX.utils.aoa_to_sheet([['문제','정답','오답1','오답2'], ...bank.map(b => [b.q, ...b.ans])]);
+    ws['!cols'] = [{wch:44},{wch:18},{wch:18},{wch:18}];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '문제');
+    XLSX.writeFile(wb, '퀴즈달리기_문제양식.xlsx');
+    $('msgS').textContent = '양식을 내려받았어요. 첫 줄(제목 줄)은 그대로 두고 둘째 줄부터 문제를 적어 주세요.';
+  }catch(e){ $('msgS').textContent = e.message; }
+}
+/* 엑셀 표의 줄들 → 문제 목록. 첫 줄이 제목 줄이면 건너뛰고, 네 칸이 다 차지 않은 줄은 뺀다 */
+function rowsToBank(rows){
+  const list = rows.map(r => [0,1,2,3].map(i => String(r[i] === undefined || r[i] === null ? '' : r[i]).replace(/[|\r\n]+/g, ' ').trim()))
+                   .filter(r => r.some(Boolean));
+  if(list.length && list[0][0].replace(/\s/g, '') === '문제') list.shift();
+  const ok = list.filter(r => r.every(Boolean));
+  return {ok, skipped:list.length - ok.length};
+}
+async function importFile(file){
+  if(!file) return;
+  try{
+    await loadXLSX();
+    const wb = XLSX.read(await file.arrayBuffer(), {type:'array'});
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, defval:'', blankrows:false});
+    const {ok, skipped} = rowsToBank(rows);
+    if(!ok.length){ $('msgS').textContent = '파일에서 문제를 찾지 못했어요. A열 문제, B열 정답, C·D열 오답 형식인지 확인해 주세요.'; return; }
+    $('sBank').value = ok.map(r => r.join(' | ')).join('\n'); countBank();
+    $('msgS').textContent = '"' + file.name + '"에서 문제 ' + ok.length + '개를 불러왔어요.' + (skipped ? ' (칸이 빈 줄 ' + skipped + '개는 뺐어요.)' : '') +
+      '\n아래 "저장하고 돌아가기"를 눌러야 게임에 적용됩니다.';
+  }catch(e){ console.error(e); $('msgS').textContent = /엑셀 도구/.test(e.message) ? e.message : '파일을 읽지 못했어요. 엑셀(.xlsx) 파일이 맞는지 확인해 주세요.'; }
+}
+
 function saveSettings(){
   const bank = parseBank($('sBank').value);
   if(!bank.length){ $('msgS').textContent = '문제를 한 개 이상 넣어 주세요. 형식: 문제 | 정답 | 오답 | 오답'; return; }
@@ -626,6 +678,9 @@ $('goSet').onclick = openSettings;
 $('save').onclick = saveSettings;
 $('resetBank').onclick = () => { $('sBank').value = DEF_BANK; countBank(); };
 $('sBank').addEventListener('input', countBank);
+$('xlsDown').onclick = downloadTemplate;
+$('xlsUp').onclick = () => $('xlsFile').click();
+$('xlsFile').onchange = e => { importFile(e.target.files[0]); e.target.value = ''; };
 $('quit').onclick = quit;
 window.addEventListener('keydown', e => {
   if(view !== 'main' || !kbd) return;
