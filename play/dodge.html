@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>벽돌 피하기 · 숙이고 점프</title>
+<title>벽돌 피하기 · 테트리스 블록</title>
 <style>
   :root{
     --bg:#0b0a1f; --panel:#17153a; --line:#2f2b6b; --text:#f3f1ff; --dim:#a9a4d6;
@@ -16,7 +16,6 @@
   button:hover{filter:brightness(1.15)}
   button:disabled{opacity:.45;cursor:default}
   .primary{background:linear-gradient(135deg,var(--pink),#8a5bff);font-weight:800}
-  .ghost{background:transparent;border:1px solid var(--line);padding:8px 12px;font-size:14px}
   .screen{display:none}
   .screen.on{display:block}
   a{color:var(--cyan)}
@@ -47,7 +46,7 @@
   body.playing .hud{display:flex}
   .hud .box{font-weight:800;font-size:clamp(14px,3.4vmin,22px);text-shadow:0 2px 6px #000}
   .hud small{display:block;font-weight:600;color:var(--dim);font-size:.65em}
-  #hudDo{color:var(--yellow);text-align:center;font-size:clamp(18px,5.4vmin,38px)}
+  #hudDo{color:var(--yellow);text-align:center;font-size:clamp(16px,4.6vmin,32px)}
   #quit{pointer-events:auto;font-size:12px;padding:6px 10px;background:#0009;display:block;margin:6px 0 0 auto}
 
   .result{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
@@ -67,7 +66,7 @@
 
 <section id="home" class="screen on">
   <h1>벽돌 <span>피하기</span></h1>
-  <p class="sub">날아오는 벽돌을 숙이고 점프해서 피하세요! 카메라가 몸을 바로 인식합니다.</p>
+  <p class="sub">테트리스 모양 벽돌이 날아옵니다. 숙이고, 뛰고, 옆으로 비켜서 빈칸으로 피하세요!</p>
 
   <div class="card">
     <button id="load" class="primary" style="width:100%;font-size:18px">카메라 켜고 시작하기</button>
@@ -77,14 +76,14 @@
   <div class="card">
     <h2>하는 방법</h2>
     <ol>
-      <li>카메라에서 <b>2~3걸음</b> 떨어져 섭니다. 머리 위로 뛸 공간이 화면에 조금 남아야 합니다.</li>
+      <li>카메라에서 <b>3걸음쯤</b> 떨어져 가운데에 섭니다. 좌우로 한 걸음씩 움직일 공간이 화면에 보여야 합니다.</li>
       <li>게임을 시작하면 3초 동안 <b>똑바로 서서</b> 키를 잽니다.</li>
-      <li><b>위쪽 벽돌</b>(주황)이 오면 머리가 벽돌 아래로 내려가게 <b>숙이거나 앉습니다</b>.</li>
-      <li><b>아래쪽 벽돌</b>(하늘색)이 오면 닿는 순간에 맞춰 <b>점프</b>합니다.</li>
-      <li>벽돌에 맞으면 생명이 줄어듭니다. 연속으로 피하면 점수가 더 올라갑니다.</li>
+      <li>화면은 가로 3칸(왼쪽·가운데·오른쪽), 세로 3칸(머리·몸통·다리)으로 나뉩니다. 벽돌이 <b>없는 칸</b>으로 몸을 옮기세요.</li>
+      <li><b>머리 칸</b>에 벽돌이 오면 숙이고, <b>다리 칸</b>에 오면 닿는 순간 점프, <b>가운데 줄</b>이 막히면 옆으로 한 걸음 비킵니다.</li>
+      <li>옆 칸 위쪽에 벽돌이 있을 때 팔을 들고 있으면 팔이 부딪힙니다.</li>
     </ol>
   </div>
-  <p class="hint">영상은 기기 안에서만 분석되고 어디에도 전송·저장되지 않습니다. 뛸 때 주변에 부딪힐 물건이 없는지 확인하세요. ·
+  <p class="hint">영상은 기기 안에서만 분석되고 어디에도 전송·저장되지 않습니다. 뛰거나 옆으로 움직일 때 부딪힐 물건이 없는지 확인하세요. ·
     <a href="./">게임 목록</a></p>
 </section>
 
@@ -103,6 +102,7 @@
         <div id="resTitle" style="font-size:22px;font-weight:800"></div>
         <div id="resScore" class="big">0</div>
         <div id="resInfo" style="color:var(--dim)"></div>
+        <div id="rankBox" style="display:contents"></div>
         <div class="row">
           <button id="again" class="primary">다시 하기</button>
           <button id="back">난이도 바꾸기</button>
@@ -118,19 +118,19 @@
         <div id="msg2" class="msg"></div>
       </div>
       <div class="card">
-        <p class="hint" style="margin:0">화면에 하늘색 뼈대가 내 몸을 따라오면 준비 완료입니다. 머리 위에 한 뼘 이상 공간이 보이는 거리에 서세요.</p>
+        <p class="hint" style="margin:0">화면에 하늘색 뼈대가 내 몸을 따라오면 준비 완료입니다. 머리 위와 양옆에 공간이 보이는 거리에 서세요.</p>
       </div>
     </div>
   </div>
 </section>
 
+<script src="rank.js"></script>
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
 const S = 384;                       // 포즈 분석용 정사각 이미지 크기
 const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 const lerp = (a,b,t) => a + (b-a)*t;
-const dist = (p,q) => Math.hypot(p[0]-q[0], p[1]-q[1]);
 
 /* 신체 인식 모델 (구글 MediaPipe Pose, 기기 안에서 실행) */
 const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
@@ -140,13 +140,62 @@ const MAP = [0,2,5,7,8,11,12,13,14,15,16,23,24,25,26,27,28];
 
 /* 난이도
    fly   : 벽돌이 날아오는 시간(초)  처음 → 마지막
-   every : 벽돌이 나오는 간격(초)    처음 → 마지막  (fly 보다 짧으면 벽돌이 연달아 온다)
-   duck  : 숙여야 하는 깊이, jump : 뛰어야 하는 높이 (둘 다 어깨너비 단위) */
+   every : 벽돌이 나오는 간격(초)    처음 → 마지막
+   duck  : 숙여야 하는 깊이, jump : 뛰어야 하는 높이, margin : 벽돌 가장자리를 봐주는 폭 (모두 어깨너비 단위)
+   maxCells : 벽돌 칸 수 제한, moves : 1 = 한 동작으로 피할 수 있는 모양만, 2 = 두 동작(옆으로 + 숙이기 등)이 필요한 모양도
+   hint  : 무엇을 해야 하는지 위에 글로 알려 주기 */
 const DIFFS = {
-  easy:{label:'하', desc:'천천히 · 하나씩',   fly:[3.4,2.8], every:[4.0,3.4], duck:0.45, jump:0.16, bricks:10, lives:5},
-  mid: {label:'중', desc:'보통',             fly:[2.6,2.0], every:[2.6,2.0], duck:0.55, jump:0.22, bricks:14, lives:3},
-  hard:{label:'상', desc:'빠르게 · 연달아',   fly:[2.0,1.5], every:[1.6,1.1], duck:0.65, jump:0.28, bricks:20, lives:3},
+  easy:{label:'하', desc:'천천히 · 쉬운 모양', fly:[3.8,3.2], every:[4.4,3.8], duck:0.45, jump:0.16, margin:0.22, maxCells:3, moves:1, hint:true,  bricks:10, lives:5},
+  mid: {label:'중', desc:'보통 · 여러 모양',   fly:[3.0,2.4], every:[3.2,2.6], duck:0.55, jump:0.22, margin:0.14, maxCells:4, moves:1, hint:true,  bricks:14, lives:3},
+  hard:{label:'상', desc:'빠르게 · 두 동작',   fly:[2.5,1.9], every:[2.6,2.0], duck:0.62, jump:0.26, margin:0.08, maxCells:4, moves:2, hint:false, bricks:18, lives:3},
 };
+
+/* ───────── 테트리스 모양 ─────────
+   화면을 가로 3칸(0 왼쪽 · 1 가운데 · 2 오른쪽) × 세로 3칸(0 머리 · 1 몸통 · 2 다리)으로 나누고,
+   모양을 돌리고 옮겨서 놓을 수 있는 모든 자리를 미리 구해 둔다. */
+const SHAPES = {
+  I:{c:'#35e0ff', cells:[[0,0],[1,0],[2,0]]},
+  V:{c:'#ff7ab8', cells:[[0,0],[0,1],[1,1]]},
+  O:{c:'#ffd84a', cells:[[0,0],[1,0],[0,1],[1,1]]},
+  L:{c:'#ff8a3d', cells:[[0,0],[0,1],[0,2],[1,2]]},
+  J:{c:'#4d7bff', cells:[[1,0],[1,1],[1,2],[0,2]]},
+  T:{c:'#b56bff', cells:[[0,0],[1,0],[2,0],[1,1]]},
+  S:{c:'#3ee686', cells:[[1,0],[2,0],[0,1],[1,1]]},
+  Z:{c:'#ff5a7a', cells:[[0,0],[1,0],[1,1],[2,1]]},
+};
+const bit = (c, r) => 1 << (c + r*3);
+/* 내가 할 수 있는 동작과 그때 몸이 차지하는 칸 */
+const MOVES = [];
+for(let c=0; c<3; c++){
+  MOVES.push({c, kind:'stand', mask:bit(c,0)|bit(c,1)|bit(c,2)});
+  MOVES.push({c, kind:'duck',  mask:bit(c,1)|bit(c,2)});             // 숙이면 머리 칸이 빈다
+  MOVES.push({c, kind:'jump',  mask:bit(c,0)|bit(c,1)});             // 뛰면 다리 칸이 빈다
+}
+const moveText = m => [m.c === 0 ? '⬅ 왼쪽' : m.c === 2 ? '➡ 오른쪽' : '', m.kind === 'duck' ? '⬇ 숙여' : m.kind === 'jump' ? '⬆ 점프' : '']
+  .filter(Boolean).join(' + ') + '!';
+const PIECES = (() => {
+  const out = [], seen = new Set();
+  for(const name in SHAPES){
+    let cells = SHAPES[name].cells;
+    for(let rot=0; rot<4; rot++){
+      cells = cells.map(([x,y]) => [-y, x]);
+      const mx = Math.min(...cells.map(c => c[0])), my = Math.min(...cells.map(c => c[1]));
+      const norm = cells.map(([x,y]) => [x-mx, y-my]);
+      const w = Math.max(...norm.map(c => c[0])) + 1, h = Math.max(...norm.map(c => c[1])) + 1;
+      for(let dx=0; dx<=3-w; dx++) for(let dy=0; dy<=3-h; dy++){
+        const cs = norm.map(([x,y]) => [x+dx, y+dy]), mask = cs.reduce((m, [x,y]) => m | bit(x,y), 0);
+        if(seen.has(mask)) continue; seen.add(mask);
+        if(!(mask & MOVES[3].mask)) continue;                         // 가만히 서 있어도 안 맞는 모양은 뺀다
+        const free = MOVES.filter(m => !(m.mask & mask));
+        const one = free.filter(m => (m.c === 1) !== (m.kind === 'stand'));   // 한 동작: 제자리에서 숙이기·점프, 또는 옆으로 비키기
+        const two = free.filter(m => m.c !== 1 && m.kind !== 'stand');        // 두 동작: 옆으로 비키면서 숙이기·점프
+        if(!one.length && !two.length) continue;                      // 피할 방법이 없는 모양은 뺀다
+        out.push({name, color:SHAPES[name].c, cells:cs, mask, moves:one.length ? 1 : 2, hint:moveText((one.length ? one : two)[0])});
+      }
+    }
+  }
+  return out;
+})();
 
 let landmarker = null, stream = null, running = false, lastVT = -1;
 let latest = null, history = [];
@@ -167,8 +216,6 @@ function beep(freq, dur=0.12, type='sine', vol=0.15){
     o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + dur);
   }catch(e){}
 }
-function store(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
-function fetchStore(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
 
 /* ───────── 인식 모델 · 카메라 ───────── */
 async function loadModel(){
@@ -229,13 +276,11 @@ function detectLoop(){
   }catch(e){ console.error(e); }
 }
 
-/* 새 관절 좌표가 들어올 때마다: 숙인 깊이와 뛰어오른 높이를 잰다 */
+/* 새 관절 좌표가 들어올 때마다 기록해 둔다 (판정은 떨림 보정 전의 값으로 한다) */
 function onPose(k, now){
   const g = game;
   if(k && g && g.cal){
-    // 판정은 떨림 보정 전의 값으로 한다 (점프는 순간이라 보정하면 낮게 잡힌다)
-    const shY = (k[5][1] + k[6][1])/2;
-    history.push({t:now, duck:(k[0][1] - g.cal.noseY)/g.cal.sw, lift:(g.cal.shY - shY)/g.cal.sw});
+    history.push({t:now, k, lift:(g.cal.shY - (k[5][1] + k[6][1])/2)/g.cal.sw});
     while(history.length && now - history[0].t > 1500) history.shift();
   }
   if(k && g && g.phase === 'calib' && now - g.t0 > 1500) g.samples.push(k);
@@ -243,8 +288,8 @@ function onPose(k, now){
   latest = k;
 }
 
-/* ───────── 서 있는 키 재기 ───────── */
-function calibrate(samples){
+/* ───────── 서 있는 키 재기 → 칸 나누기 ───────── */
+function calibrate(samples, d){
   if(samples.length < 5) return {err:'몸이 보이지 않아요. 카메라 앞에 서 주세요'};
   const avg = (i, j) => samples.reduce((a, s) => a + s[i][j], 0)/samples.length;
   if(avg(5,2) < 0.5 || avg(6,2) < 0.5 || avg(0,2) < 0.5) return {err:'얼굴과 어깨가 보이게 서 주세요'};
@@ -253,6 +298,14 @@ function calibrate(samples){
   const cal = {sw, noseY:avg(0,1), shY:(avg(5,1) + avg(6,1))/2, cx:(avg(5,0) + avg(6,0))/2};
   if(cal.noseY - sw*1.0 < 0) return {err:'머리 위 공간이 부족해요. 조금 뒤로 물러나 주세요'};
   if(cal.noseY + sw*1.2 > 1) return {err:'숙일 공간이 부족해요. 카메라를 조금 낮추거나 뒤로 물러나 주세요'};
+  const half = sw*0.7;                                               // 가운데 칸 너비의 절반
+  if(cal.cx - half - sw*1.2 < 0 || cal.cx + half + sw*1.2 > 1) return {err:'옆으로 피할 공간이 부족해요. 뒤로 물러나 가운데에 서 주세요'};
+  const hipSeen = avg(11,2) > 0.5 && avg(12,2) > 0.5 && (avg(11,1) + avg(12,1))/2 < 0.95;
+  const hipY = hipSeen ? (avg(11,1) + avg(12,1))/2 : cal.shY + sw*1.4;
+  // 칸의 경계선: 머리 칸의 아랫면은 "머리 꼭대기가 이 선 아래로 내려가야 하는 높이"
+  cal.xs = [0, cal.cx - half, cal.cx + half, 1];
+  cal.ys = [0, cal.noseY + (d.duck - 0.5)*sw, 0, 1];
+  cal.ys[2] = clamp(hipY + sw*0.15, cal.ys[1] + sw*0.8, 0.86);
   return {cal};
 }
 
@@ -275,21 +328,18 @@ function drawSkeleton(c, pts, size){
   c.restore();
 }
 
-/* 벽돌 한 장 그림 (위쪽용 · 아래쪽용을 한 번씩 만들어 둔다) */
-function brickImage(c1, c2){
-  const W = 512, H = 160, c = document.createElement('canvas'); c.width = W; c.height = H;
-  const x = c.getContext('2d'), g = x.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0, c1); g.addColorStop(1, c2);
-  x.fillStyle = g; x.fillRect(0, 0, W, H);
-  x.strokeStyle = 'rgba(255,255,255,.3)'; x.lineWidth = 3;
-  for(let r=0; r<4; r++){
-    x.beginPath(); x.moveTo(0, r*H/4); x.lineTo(W, r*H/4); x.stroke();
-    for(let k=0; k<=6; k++){ const bx = k*W/6 + (r%2 ? W/12 : 0); x.beginPath(); x.moveTo(bx, r*H/4); x.lineTo(bx, (r+1)*H/4); x.stroke(); }
-  }
-  x.strokeStyle = '#fff3b0'; x.lineWidth = 10; x.strokeRect(5, 5, W-10, H-10);
-  return c;
+/* 테트리스 블록 한 칸 그림 (색마다 한 번씩 만들어 둔다) */
+const BLOCKS = {};
+function blockImage(color){
+  if(BLOCKS[color]) return BLOCKS[color];
+  const W = 128, c = document.createElement('canvas'); c.width = c.height = W;
+  const x = c.getContext('2d');
+  x.fillStyle = color; x.fillRect(0, 0, W, W);
+  x.fillStyle = 'rgba(255,255,255,.45)'; x.beginPath(); x.moveTo(0,0); x.lineTo(W,0); x.lineTo(W-18,18); x.lineTo(18,18); x.lineTo(18,W-18); x.lineTo(0,W); x.fill();
+  x.fillStyle = 'rgba(0,0,0,.35)';       x.beginPath(); x.moveTo(W,W); x.lineTo(0,W); x.lineTo(18,W-18); x.lineTo(W-18,W-18); x.lineTo(W-18,18); x.lineTo(W,0); x.fill();
+  x.strokeStyle = 'rgba(11,10,31,.9)'; x.lineWidth = 6; x.strokeRect(3, 3, W-6, W-6);
+  return BLOCKS[color] = c;
 }
-const IMG = {duck:brickImage('#ff8a3d','#ff3d6e'), jump:brickImage('#35e0ff','#3d6bff')};
 
 /* ───────── 준비 화면 ───────── */
 function show(v){
@@ -314,12 +364,13 @@ function buildDiffs(){
 /* ───────── 게임 진행 ───────── */
 function startGame(){
   const d = DIFFS[diffKey];
-  game = {d, score:0, lives:d.lives, combo:0, passed:0, spawned:0, judged:0, nextSpawn:0, lastType:'', same:0,
+  const pool = PIECES.filter(p => p.cells.length <= d.maxCells && p.moves <= d.moves);
+  game = {d, pool, score:0, lives:d.lives, combo:0, passed:0, spawned:0, judged:0, nextSpawn:0, lastMask:0, lastHint:'', same:0,
           bricks:[], phase:'calib', t0:performance.now(), samples:[], cal:null, tick:-1, hitAt:-9999, endAt:0};
   history = [];
   document.body.classList.add('playing');
   $('result').classList.remove('on');
-  $('hudDo').textContent = '똑바로 서 주세요';
+  $('hudDo').textContent = '가운데에 똑바로 서 주세요';
   updateHud(); resize(); beep(440, 0.1);
 }
 function updateHud(){
@@ -331,27 +382,47 @@ function updateHud(){
 
 function spawn(now){
   const g = game, prog = g.d.bricks > 1 ? g.spawned/(g.d.bricks-1) : 0;     // 뒤로 갈수록 빨라진다
-  let type = Math.random() < 0.5 ? 'duck' : 'jump';
-  if(type === g.lastType && g.same >= 2) type = type === 'duck' ? 'jump' : 'duck';   // 같은 것이 세 번 연달아 나오지 않게
-  g.same = type === g.lastType ? g.same + 1 : 1; g.lastType = type;
-  g.bricks.push({type, start:now, dur:lerp(g.d.fly[0], g.d.fly[1], prog)*1000, state:'fly', doneAt:0});
+  let p, tries = 0;
+  // 같은 모양이 바로 또 나오거나, 같은 동작이 세 번 연달아 나오지 않게 고른다
+  do { p = g.pool[Math.floor(Math.random()*g.pool.length)]; tries++; }
+  while(tries < 30 && (p.mask === g.lastMask || (p.hint === g.lastHint && g.same >= 2)));
+  g.same = p.hint === g.lastHint ? g.same + 1 : 1; g.lastHint = p.hint; g.lastMask = p.mask;
+  g.bricks.push({p, start:now, dur:lerp(g.d.fly[0], g.d.fly[1], prog)*1000, state:'fly', doneAt:0});
   g.spawned++;
   g.nextSpawn = now + lerp(g.d.every[0], g.d.every[1], prog)*1000;
 }
 
-/* 벽돌이 닿은 순간의 판정
-   위쪽 벽돌: 최근 0.25초 동안 평균적으로 충분히 숙이고 있었는가
-   아래쪽 벽돌: 최근 0.45초 안에 충분히 높이 뛰어오른 순간이 있었는가 */
-function judge(b, now){
-  const g = game;
-  let ok;
-  if(b.type === 'duck'){
-    const r = history.filter(h => now - h.t <= 250);
-    ok = r.length > 0 && r.reduce((s, h) => s + h.duck, 0)/r.length >= g.d.duck;
-  }else{
-    const r = history.filter(h => now - h.t <= 450);
-    ok = r.length > 0 && Math.max(...r.map(h => h.lift)) >= g.d.jump;
+/* 벽돌이 닿은 순간, 몸이 벽돌 칸과 겹치는지 본다.
+   머리 · 몸통 칸: 머리 꼭대기 · 코 · 어깨 · 몸통 · 엉덩이가 칸 안에 있으면 맞은 것 (머리 칸은 든 팔도 포함)
+   다리 칸      : 그 줄에 서 있고, 직전 0.45초 안에 충분히 높이 뛰지 않았으면 맞은 것 */
+function collide(piece, now){
+  const g = game, c = g.cal, sw = c.sw, m = g.d.margin*sw;
+  const recent = history.filter(h => now - h.t <= 200);
+  if(!recent.length) return true;                                    // 몸이 안 보이면 맞은 것으로 친다
+  const P = i => [recent.reduce((a, h) => a + h.k[i][0], 0)/recent.length, recent.reduce((a, h) => a + h.k[i][1], 0)/recent.length,
+                  recent.reduce((a, h) => a + h.k[i][2], 0)/recent.length];
+  const nose = P(0), ls = P(5), rs = P(6), lh = P(11), rh = P(12);
+  const shC = [(ls[0]+rs[0])/2, (ls[1]+rs[1])/2];
+  const hipOK = lh[2] > 0.5 && rh[2] > 0.5;
+  const body = [[nose[0], nose[1] - sw*0.5], nose, ls, rs, hipOK ? [(shC[0]+lh[0]+rh[0])/3, (shC[1]+lh[1]+rh[1])/3] : [shC[0], shC[1] + sw*0.6]];
+  if(hipOK) body.push(lh, rh);
+  const arms = [7,8,9,10].map(P).filter(p => p[2] > 0.5);
+  const jumped = Math.max(...history.filter(h => now - h.t <= 450).map(h => h.lift)) >= g.d.jump;
+  for(const [col, row] of piece.cells){
+    const x0 = c.xs[col] + (col > 0 ? m : -1), x1 = c.xs[col+1] - (col < 2 ? m : -1);     // 바깥쪽 칸은 화면 밖까지 이어진다
+    if(row === 2){
+      if(!jumped && shC[0] > x0 && shC[0] < x1) return true;
+      continue;
+    }
+    const y0 = row === 0 ? -1 : c.ys[1] + m, y1 = row === 0 ? c.ys[1] - m : c.ys[2] - m;
+    const inside = p => p[0] > x0 && p[0] < x1 && p[1] > y0 && p[1] < y1;
+    if(body.some(inside) || (row === 0 && arms.some(inside))) return true;
   }
+  return false;
+}
+
+function judge(b, now){
+  const g = game, ok = !collide(b.p, now);
   b.state = ok ? 'pass' : 'hit'; b.doneAt = now; g.judged++;
   if(ok){ g.combo++; g.passed++; g.score += 100 + (g.combo-1)*10; beep(660, 0.08); setTimeout(() => beep(990, 0.14), 70); }
   else  { g.combo = 0; g.lives--; g.hitAt = now; beep(110, 0.35, 'sawtooth', 0.2); }
@@ -359,11 +430,11 @@ function judge(b, now){
 }
 
 function finish(){
-  const g = game, key = 'dodge-best:' + diffKey;
-  const best = Math.max(fetchStore(key) || 0, g.score); store(key, best);
+  const g = game;
   $('resTitle').textContent = (g.lives > 0 ? '끝까지 버텼어요!' : '게임 끝') + ' (난이도 ' + g.d.label + ')';
   $('resScore').textContent = g.score + '점';
-  $('resInfo').textContent = '피한 벽돌 ' + g.passed + ' / ' + g.d.bricks + ' · 최고 기록 ' + best + '점';
+  $('resInfo').textContent = '피한 벽돌 ' + g.passed + ' / ' + g.d.bricks;
+  Rank.mount($('rankBox'), 'dodge:' + diffKey, g.score, '난이도 ' + g.d.label + ' 순위');
   $('result').classList.add('on');
   g.phase = 'done';
 }
@@ -380,12 +451,12 @@ function resize(){
 }
 window.addEventListener('resize', resize);
 
-function bigText(txt, color, Z, scale, y){
+function bigText(txt, color, Z, scale){
   ctx.save();
   ctx.font = '900 ' + Math.round(Z*scale) + 'px sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.lineWidth = Z*0.02; ctx.strokeStyle = '#0b0a1f'; ctx.fillStyle = color;
-  ctx.strokeText(txt, Z/2, Z*(y || 0.5)); ctx.fillText(txt, Z/2, Z*(y || 0.5));
+  ctx.strokeText(txt, Z/2, Z/2); ctx.fillText(txt, Z/2, Z/2);
   ctx.restore();
 }
 
@@ -416,34 +487,39 @@ function render(now){
       const el = (now - g.t0)/1000, n = 3 - Math.floor(el);
       if(el >= 0 && n !== g.tick && n > 0){ g.tick = n; beep(520, 0.08); }
       if(el >= 3){
-        const r = calibrate(g.samples);
+        const r = calibrate(g.samples, g.d);
         if(r.cal){ g.cal = r.cal; g.phase = 'play'; g.nextSpawn = now + 800; history = []; $('hudDo').textContent = '준비!'; }
         else{ $('hudDo').textContent = r.err; g.samples = []; g.tick = -1; g.t0 = now + 1800; beep(200, 0.2, 'square', 0.08); }
-      }else if(el >= 0 && el < 0.1) $('hudDo').textContent = '똑바로 서 주세요';
+      }else if(el >= 0 && el < 0.1) $('hudDo').textContent = '가운데에 똑바로 서 주세요';
     }else if(g.phase === 'play'){
       if(g.spawned < g.d.bricks && now >= g.nextSpawn) spawn(now);
       for(const b of g.bricks) if(b.state === 'fly' && now - b.start >= b.dur) judge(b, now);
       g.bricks = g.bricks.filter(b => b.state === 'fly' || now - b.doneAt < 600);
       const next = g.bricks.find(b => b.state === 'fly');
-      $('hudDo').textContent = next ? (next.type === 'duck' ? '⬇ 숙여!' : '⬆ 점프!') : '';
+      $('hudDo').textContent = next && g.d.hint ? next.p.hint : '';
       if(g.lives <= 0 || (g.judged >= g.d.bricks && !g.bricks.length)){
         if(!g.endAt) g.endAt = now + 500; else if(now >= g.endAt) finish();
       }
     }
 
-    // 벽돌 (멀리 있는 것부터)
     if(g.cal){
       const c = g.cal;
-      // 위쪽 벽돌의 아랫면 = 이 선 아래로 머리 꼭대기가 내려가야 하는 높이, 아래쪽 벽돌은 화면 아래 띠
-      const duckEdge = clamp(c.noseY + (g.d.duck - 0.5)*c.sw, 0.08, 0.9);
+      // 칸 경계선을 옅게 보여 준다
+      ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = Math.max(1, Z*0.003); ctx.setLineDash([Z*0.012, Z*0.012]);
+      for(const x of [c.xs[1], c.xs[2]]){ ctx.beginPath(); ctx.moveTo(x*Z, 0); ctx.lineTo(x*Z, Z); ctx.stroke(); }
+      for(const y of [c.ys[1], c.ys[2]]){ ctx.beginPath(); ctx.moveTo(0, y*Z); ctx.lineTo(Z, y*Z); ctx.stroke(); }
+      ctx.setLineDash([]);
+      // 벽돌 (멀리 있는 것부터). 화면 가운데를 중심으로 커지면서 다가온다
       for(const b of g.bricks.slice().reverse()){
-        let t = clamp((now - b.start)/b.dur, 0, 1), s = 1/(7 - 6*t), a = Math.min(0.95, 0.5 + 0.6*t);
-        if(b.state === 'pass'){ const u = clamp((now - b.doneAt)/500, 0, 1); s = 1 + u*0.9; a = 0.95*(1-u); }
-        if(b.state === 'hit'){ a = 0.95*(1 - clamp((now - b.doneAt)/600, 0, 1)); }
-        const y0 = b.type === 'duck' ? -0.4 : 0.8, y1 = b.type === 'duck' ? duckEdge : 1.4;      // 화면 비율 좌표
-        const X = v => Z/2 + (v - 0.5)*Z*s, Y = v => Z/2 + (v - 0.5)*Z*s;
+        let t = clamp((now - b.start)/b.dur, 0, 1), s = 1/(7 - 6*t), a = Math.min(0.92, 0.55 + 0.5*t);
+        if(b.state === 'pass'){ const u = clamp((now - b.doneAt)/500, 0, 1); s = 1 + u*0.9; a = 0.92*(1-u); }
+        if(b.state === 'hit'){ a = 0.92*(1 - clamp((now - b.doneAt)/600, 0, 1)); }
+        const M = v => Z/2 + (v - 0.5)*Z*s, img = blockImage(b.p.color), gap = 0.006;
         ctx.globalAlpha = a;
-        ctx.drawImage(IMG[b.type], X(0.03), Y(y0), Z*s*0.94, (y1 - y0)*Z*s);
+        for(const [col, row] of b.p.cells){
+          const x0 = c.xs[col] + gap, x1 = c.xs[col+1] - gap, y0 = c.ys[row] + gap, y1 = c.ys[row+1] - gap;
+          ctx.drawImage(img, M(x0), M(y0), (x1-x0)*Z*s, (y1-y0)*Z*s);
+        }
         ctx.globalAlpha = 1;
       }
     }

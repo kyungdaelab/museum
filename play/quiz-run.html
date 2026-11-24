@@ -67,6 +67,8 @@
   .ov.on{display:flex}
   .ov > :first-child{margin-top:auto} .ov > :last-child{margin-bottom:auto}
   .ov h2{font-size:clamp(24px,5vw,44px);margin:0;color:var(--yellow)}
+  .ov input{width:min(100%,300px);padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:#0e0d28;color:#fff;
+    font:inherit;font-size:18px;text-align:center;flex:none}
   .ov p{margin:0;color:var(--dim);line-height:1.6;max-width:560px}
   .ov .big{font-size:clamp(30px,7vw,60px);font-weight:900;color:#fff;line-height:1.1}
   table{border-collapse:collapse;width:min(100%,620px);font-size:clamp(14px,2vw,18px)}
@@ -357,7 +359,7 @@ async function begin(useKeyboard){
   const all = bank.map((_, i) => i);
   S = {bank, n, cur:0, phase:'intro', cal:null, samples:[], t0:0, tick:-1, fx:null, remaining:TRACK, traveled:0,
        players:Array.from({length:cfg.players}, (_, i) => ({
-         name:names[i] || (i+1) + '번',
+         name:names[i] || (i+1) + '번', named:!!names[i],
          // order[문 번호] = 그 문에 적힌 답의 번호(0 이 정답)
          qs:(cfg.random ? shuffle(all).slice(0, n) : all.slice(0, n)).map(qi => ({qi, order:shuffle([0,1,2])})),
          qi:0, lives:cfg.lives, time:0, right:0, done:false, out:false}))};
@@ -390,12 +392,16 @@ function introPlayer(){
   const P = S.players[S.cur];
   S.phase = 'intro'; S.cal = null; S.remaining = TRACK; lane = 1; laneAnim = 1;
   hud(); showQuestion(false);
+  // 순위표에 올라갈 닉네임 (비워 두면 1번, 2번… 그대로)
+  const nick = el('input'); nick.maxLength = 10; nick.value = P.named ? P.name : ''; nick.placeholder = '닉네임 (10자까지)'; nick.autocomplete = 'off';
   overlay([
     el('h2', P.name + ' 차례!'),
+    nick,
     el('p', kbd ? '스페이스를 누르고 있으면 달리고, ← → 로 문을 고릅니다.'
                 : '카메라 앞 가운데에 서 주세요. 제자리 달리기로 앞으로 가고, 옆으로 한 걸음 옮겨 문을 고릅니다.'),
     button('준비 완료', () => {
-      overlay(null); beep(440, 0.1);
+      if(nick.value.trim()){ P.name = nick.value.trim(); P.named = true; }
+      overlay(null); hud(); beep(440, 0.1);
       if(kbd){ S.cal = {cx:0, sw:1}; startQuestion(); }
       else { S.phase = 'calib'; S.samples = []; S.tick = -1; S.t0 = performance.now(); S.calMsg = '가운데에 똑바로 서 주세요'; }
     }),
