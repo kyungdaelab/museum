@@ -317,6 +317,12 @@ async function serverApi() {
     async adminRooms() { return must(await db.from('rooms').select('id, title, type, visibility, blocked, blocked_reason, owner_id, storage_used_mb, storage_limit_mb').order('storage_used_mb', { ascending: false })); },
     async setBlocked(roomId, blocked, reason) { must(await db.from('rooms').update({ blocked, blocked_reason: blocked ? reason : null }).eq('id', roomId)); },
     async storageUsage() { const rows = must(await db.rpc('storage_usage')); return Array.isArray(rows) ? rows[0] : rows; },
+    // 관리자 도구 (0017_admin_tools.sql)
+    async adminTakeRoom(roomId) { must(await db.rpc('admin_take_room', { p_room: roomId })); },               // 전시실 한 개를 내 것으로
+    async adminTakeOver(teacherId) { return must(await db.rpc('admin_take_over', { p_teacher: teacherId })); }, // 그 계정의 전시실 · 학급 등을 모두 내 것으로 → { rooms, classes }
+    async adminRemoveTeacher(teacherId) { must(await db.rpc('admin_remove_teacher', { p_teacher: teacherId })); },
+    async adminSetRole(teacherId, role) { must(await db.rpc('admin_set_role', { p_teacher: teacherId, p_role: role })); },
+    async adminHandOver(teacherId) { must(await db.rpc('admin_hand_over', { p_teacher: teacherId })); },       // 그 사람을 관리자로, 나는 교사로
   };
 }
 
@@ -472,6 +478,14 @@ function demoApi() {
     async setApproved(tid, approved) { teachers.find((t) => t.teacher_id === tid).approved = approved; },
     async adminRooms() { return rooms.map(view); },
     async setBlocked(rid, blocked, reason) { Object.assign(rooms.find((r) => r.id === rid), { blocked, blocked_reason: blocked ? reason : null }); },
+    async adminTakeRoom(rid) { rooms.find((r) => r.id === rid).owner_id = 'me'; },
+    async adminTakeOver() { return { rooms: 0, classes: 0 }; },
+    async adminRemoveTeacher(tid) { if (tid === 'me') throw new Error('지금 로그인한 내 계정은 지울 수 없습니다'); teachers.splice(teachers.findIndex((t) => t.teacher_id === tid), 1); },
+    async adminSetRole(tid, role) {
+      if (role === 'teacher' && !teachers.some((t) => t.role === 'admin' && t.approved && t.teacher_id !== tid)) throw new Error('관리자가 한 명은 있어야 합니다. 먼저 다른 사람을 관리자로 지정해 주세요');
+      teachers.find((t) => t.teacher_id === tid).role = role;
+    },
+    async adminHandOver(tid) { teachers.find((t) => t.teacher_id === tid).role = 'admin'; teachers.find((t) => t.teacher_id === 'me').role = 'teacher'; },
     async storageUsage() {
       const used = Math.round(artworks.reduce((s, a) => s + a.file_size, 0) / 1048576 * 100) / 100;
       return { used_mb: used, stored_mb: used, free_limit_mb: 1024, percent: Math.round(used / 1024 * 1000) / 10, room_count: rooms.length, artwork_count: artworks.length };
