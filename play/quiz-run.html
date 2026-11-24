@@ -44,16 +44,18 @@
   .check input{width:20px;height:20px}
 
   /* 게임 화면 */
-  #main{padding:8px 10px;max-width:calc((100dvh - 265px) * 16 / 9 + 20px);min-width:min(100%,520px);margin:0 auto}
+  #main{padding:8px 10px;max-width:calc((100dvh - 315px) * 16 / 9 + 20px);min-width:min(100%,520px);margin:0 auto}
   .top{display:flex;justify-content:space-between;align-items:center;gap:10px;font-weight:800;font-size:clamp(14px,2.2vw,20px)}
   .top small{color:var(--dim);font-weight:600;margin-right:4px}
   #hLives{color:var(--red);letter-spacing:2px}
-  #question{font-size:clamp(18px,3.2vw,32px);font-weight:900;text-align:center;margin:6px 0;min-height:1.3em;color:#fff}
+  #question{font-size:clamp(22px,3.8vw,40px);font-weight:900;text-align:center;margin:8px 0;min-height:1.3em;line-height:1.3;
+    color:#111;background:#fff;border-radius:16px;padding:16px 18px;word-break:keep-all;box-shadow:0 4px 0 #c9c4f5}
   .answers{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
-  .ans{border:3px solid var(--c);border-radius:14px;padding:8px 6px;text-align:center;font-weight:800;
-    font-size:clamp(14px,2.2vw,22px);background:#0e0d28;opacity:.75;transition:transform .12s,opacity .12s;word-break:keep-all}
-  .ans b{display:block;color:var(--c);font-size:.8em}
-  .ans.sel{opacity:1;transform:translateY(-3px) scale(1.03);background:#26225e;box-shadow:0 0 18px var(--c)}
+  .ans{border:5px solid var(--c);border-radius:14px;padding:10px 8px 12px;text-align:center;font-weight:800;color:#111;
+    font-size:clamp(17px,2.7vw,28px);line-height:1.25;background:#e4e2f3;transition:transform .12s,background .12s;word-break:keep-all}
+  .ans b{display:inline-block;background:var(--c);color:#111;font-size:.6em;border-radius:999px;padding:2px 12px;margin-bottom:4px}
+  .ans span{display:block}
+  .ans.sel{transform:translateY(-3px) scale(1.03);background:#fff;box-shadow:0 0 0 3px #fff, 0 0 22px 4px var(--c)}
   .stageBox{position:relative;width:100%;aspect-ratio:16/9;border-radius:18px;overflow:hidden;background:#000;border:2px solid var(--line)}
   #stage{width:100%;height:100%;display:block}
   #video{position:absolute;width:2px;height:2px;opacity:0;pointer-events:none}
