@@ -80,6 +80,19 @@ export async function checkRoomCode(room, code) {
   return !error && data === true;
 }
 
+// 예시 작품: 아직 작품을 하나도 올리지 않은 그림 전시실이 텅 비어 보이지 않게, 사이트에 들어 있는 예시 그림을 대신 걸어 둔다.
+// 선생님이 작품을 하나라도 올리면 예시는 더 이상 나오지 않는다. (DB 에는 저장되지 않는, 화면에만 보이는 그림)
+export async function exampleArtworks(room) {
+  if (!room || room.type === 'solid') return [];
+  try {
+    const json = await getJson('data/rooms/flat-sample.json');
+    return (json.artworks ?? []).filter((a) => a.slot <= (room.maxArtworks ?? 10)).map((a) => ({
+      ...a, id: 'example-' + a.id, image: `assets/rooms/flat-sample/${a.image}`, grade: '예시 작품',
+      artist: a.artist || '익명 (예시)', description: `${a.description}\n\n※ 전시실이 비어 있을 때 보이는 예시 그림입니다. 선생님이 작품을 올리면 사라집니다.`,
+    }));
+  } catch { return []; }
+}
+
 // 한 전시실의 작품 목록. 입장 코드가 있는 전시실은 code 가 맞아야 받는다 (틀리면 빈 목록)
 export async function getArtworks(roomId, code = null) {
   if (!backendEnabled()) { const json = await getJson(`data/rooms/${encodeURIComponent(roomId)}.json`); return Array.isArray(json) ? json : json.artworks ?? []; }

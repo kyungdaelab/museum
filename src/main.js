@@ -18,7 +18,7 @@ import { parseVox, exportVox } from './character/voxel/vox.js';
 import { makeTestRoom } from './data/test-rooms.js';
 import { buildRoom } from './room/RoomBuilder.js';
 import { loadArtworks } from './artworks/ArtworkManager.js';
-import { getArtworks, getRoom, checkRoomCode } from './data/rooms.js';
+import { getArtworks, getRoom, checkRoomCode, exampleArtworks } from './data/rooms.js';
 import { ensureSession, currentAccount } from './data/student-auth.js';
 import { ask, askCode, showShare } from './ui/dialogs.js';
 import { fileUrl } from './data/storage.js';
@@ -122,6 +122,7 @@ async function enterRoom(roomConfig, testArtworks = null, opts = {}) {
     if (!list) {
       try { list = await getArtworks(roomConfig.id, opts.code ?? null); }
       catch (e) { list = []; showNotice([e.message]); }
+      if (!list.length) list = await exampleArtworks(roomConfig);        // 아직 작품이 없는 전시실에는 예시 그림을 걸어 둔다
     }
     if (my === enterToken)
       artworks = await loadArtworks(room, list, {
