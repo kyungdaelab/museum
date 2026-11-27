@@ -198,7 +198,7 @@
   .bar span { display: block; height: 100%; border-radius: 999px; background: var(--ok); transition: width .5s, background .5s; }
 
   /* 옆 패널 */
-  aside { display: grid; gap: 16px; }
+  aside { display: grid; gap: 16px; position: relative; z-index: 4; }   /* 맵 장식이 옆으로 넘쳐도 원리·점수 창 아래로 깔리게 */
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; }
   .card h2 { font-size: 14px; color: var(--sub); font-weight: 600; margin-bottom: 10px; display: flex; justify-content: space-between; }
   .score { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 16px; }
