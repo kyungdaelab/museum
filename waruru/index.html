@@ -1,0 +1,1918 @@
+<!doctype html>
+<html lang="ko" data-theme="a">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>와르르 아트</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f3f1ec;
+    --panel: #ffffff;
+    --ink: #1c1c1e;
+    --sub: #6b6a66;
+    --line: #e2dfd7;
+    --board: #15161a;
+    --grid: #30333c;
+    --lit: #ffffff;      /* 차례인 사람의 고리·선 */
+    --dim: #7d808c;      /* 나머지 사람의 고리·선 */
+    --spot: #474b58;     /* 판 위에 자리를 알려 주는 흐린 점 */
+    --danger: #d93a3a;
+    --ok: #2e9e6b;
+    --r: 14px;
+    --W: min(92vw, 70vh, 620px);
+    --p0: #e5484d; --p1: #3b6fe0; --p2: #dd9a00; --p3: #2e9e6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: -apple-system, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    line-height: 1.65; word-break: keep-all; overflow-x: hidden;   /* 무너질 때 날아가는 조각 때문에 가로 스크롤이 생기지 않게 */
+    -webkit-tap-highlight-color: transparent;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  h1, h2, h3, p { margin: 0; }
+
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; max-width: 1160px; margin: 0 auto;
+  }
+  header h1 { font-size: 20px; letter-spacing: -0.02em; white-space: nowrap; }
+  .netinfo { flex: 1; font-size: 13px; color: var(--sub); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .turn .mine { font-style: normal; font-size: 13px; font-weight: 700; color: #fff; background: var(--ok); border-radius: 999px; padding: 2px 10px; }
+  /* 온라인: 방 고르기와 대기실 */
+  .stack { display: grid; gap: 10px; }
+  .stack[hidden] { display: none; }
+  .inp { min-height: 48px; border-radius: 12px; border: 2px solid var(--line); padding: 0 14px; font: inherit; font-size: 16px; background: var(--panel); color: var(--ink); width: 100%; }
+  .inp:focus { outline: none; border-color: var(--ink); }
+  .joinrow { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .roomcode { font-size: 64px; font-weight: 900; letter-spacing: .12em; line-height: 1.1; text-align: center; font-variant-numeric: tabular-nums; }
+  .peers { display: grid; gap: 6px; }
+  .peers .score { background: var(--bg); border-radius: 10px; padding: 8px 12px; }
+  .note { font-size: 14px; color: var(--sub); }
+  .note.warn { color: var(--danger); font-weight: 600; }
+  .divider { display: flex; align-items: center; gap: 10px; color: var(--sub); font-size: 13px; }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .btn {
+    min-height: 44px; padding: 0 16px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--panel); font-weight: 600; font-size: 15px;
+  }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .4; cursor: default; }
+
+  main {
+    max-width: 1160px; margin: 0 auto; padding: 0 20px 40px;
+    display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start;
+  }
+  @media (max-width: 920px) { main { grid-template-columns: 1fr; padding: 0 16px 32px; } }
+
+  /* 차례 표시 */
+  .turn { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; min-height: 32px; flex-wrap: wrap; }
+  /* 사람 표시: 어두운 원 안에 그 사람의 빛 고리 */
+  .chip { width: 34px; height: 34px; border-radius: 50%; background: var(--board); flex: none; position: relative; }
+  .chip svg { position: absolute; inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); }
+  .turn small { font-weight: 500; color: var(--sub); font-size: 14px; }
+  .pips { display: inline-flex; gap: 5px; margin-left: 2px; }
+  .pips i { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--ink); }
+  .pips i.on { background: var(--ink); }
+  .hint { font-size: 14px; color: var(--sub); min-height: 23px; }
+
+  /* 판 */
+  .scene {
+    height: calc(var(--W) * .97); perspective: 1200px;
+    display: grid; place-items: center; position: relative;
+  }
+  .cam { width: var(--W); height: var(--W); transform: translateY(-6%) scale(.93) rotateX(34deg); transform-style: preserve-3d; position: relative;
+    pointer-events: none; /* 판이 기울어 이 틀의 평면 아래로 내려간 부분도 눌리도록, 틀 자체는 클릭을 받지 않는다 */ }
+  .board { pointer-events: auto; }
+  .shadow {
+    position: absolute; inset: 8%; border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(0,0,0,.22), rgba(0,0,0,0));
+    transform: translateZ(-70px); pointer-events: none;
+  }
+  .pivot {
+    position: absolute; left: 50%; top: 50%; width: 15%; height: 15%; margin: -7.5% 0 0 -7.5%;
+    border-radius: 50%; background: #8d877a; transform: translateZ(-34px); pointer-events: none;
+    box-shadow: 0 0 0 10px #a59f92, 0 0 0 22px rgba(140,134,120,.35);
+  }
+  .board {
+    position: absolute; inset: 0; background: var(--board); border-radius: 18px;
+    border: 1px solid #000; box-shadow: 0 7px 0 #000;
+    transform-style: preserve-3d;
+    transition: transform .7s cubic-bezier(.3, 1.5, .5, 1);
+  }
+  .board.danger { box-shadow: 0 7px 0 #000, 0 0 0 4px rgba(217,58,58,.7); }
+  .board.falling { transition: transform 1.2s cubic-bezier(.5, 0, .9, .4); }
+  .board svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  /* 누르는 자리: 점·그림보다 위(translateZ)에 두어 입체로 기울어도 항상 눌린다 */
+  .pt {
+    position: absolute; width: calc(100% / var(--n)); height: calc(100% / var(--n));
+    transform: translate(-50%, -50%) translateZ(4px); background: none; border: 0; padding: 0;
+    display: grid; place-items: center;
+  }
+  .pt::after {
+    content: ""; grid-area: 1 / 1; width: var(--ghost); height: var(--ghost); border-radius: 50%;
+    background: var(--ghostc); opacity: 0; transition: opacity .12s;
+  }
+  @media (hover: hover) { .pt.empty:hover::after { opacity: .4; } }
+  /* 미리보기: 놓일 점을 진하게 보여 주고 흰 점선 고리가 깜빡인다 */
+  .pt.ghost::after { opacity: .85; }
+  .pt.ghost::before { border: 2px dashed var(--lit); animation: pulse .7s infinite alternate; }
+  .pt::before { content: ""; grid-area: 1 / 1; width: 92%; height: 92%; border-radius: 50%; }
+  .pt.sel::before { border: 3px solid var(--lit); box-shadow: 0 0 10px var(--lit); }
+  .pt.tgt::before { border: 3px dashed var(--cur); animation: pulse 1s infinite alternate; }
+  @keyframes pulse { to { transform: scale(.82); } }
+  .dot {
+    position: absolute; border-radius: 50%; background: var(--c);
+    transform: translate(-50%, -50%) translateZ(2px);
+    /* 공처럼 보이게: 왼쪽 위의 밝은 빛, 오른쪽 아래의 그늘, 바닥에 떨어진 그림자 */
+    background-image: radial-gradient(circle at 34% 28%, rgba(255,255,255,.6), rgba(255,255,255,0) 44%),
+                      radial-gradient(circle at 64% 78%, rgba(0,0,0,.32), rgba(0,0,0,0) 62%);
+    box-shadow: 0 5px 7px rgba(0,0,0,.55);
+    pointer-events: none;
+    transition: transform 1.1s ease-in, opacity 1.1s ease-in;
+  }
+  /* 주인을 알려 주는 외곽선: 점에서 한 틈 띄운 고리. 색은 점의 것, 고리는 사람의 것 */
+  .board .dot svg.ring {
+    position: absolute; inset: auto; left: -9px; top: -9px;
+    width: calc(100% + 18px); height: calc(100% + 18px); overflow: visible;
+  }
+  /* 판이 무너질 때: 화면이 흔들리고 큰 글씨가 튀어나온다 */
+  .scene.quake { animation: quake .7s cubic-bezier(.3, .6, .4, 1); }
+  /* 무너지는 동안에는 판 가운데 표시와 판 아래 받침·그림자를 감춘다 */
+  .pivot, .shadow, .board svg .center { transition: opacity .25s; }
+  .scene.quake .pivot, .scene.quake .shadow, .scene.quake .board svg .center { opacity: 0; }
+  @keyframes quake {
+    0%, 100% { transform: translate(0, 0); } 12% { transform: translate(-9px, 5px); } 26% { transform: translate(8px, -6px); }
+    40% { transform: translate(-7px, -4px); } 55% { transform: translate(6px, 5px); } 72% { transform: translate(-4px, 2px); } 86% { transform: translate(3px, -2px); }
+  }
+  .crash {
+    position: absolute; left: 50%; top: 42%; z-index: 6; pointer-events: none; white-space: nowrap;
+    font-size: clamp(54px, 15vw, 120px); font-weight: 900; letter-spacing: -0.04em; color: #fff;
+    -webkit-text-stroke: 3px var(--danger); text-shadow: 0 8px 0 rgba(0,0,0,.35);
+    animation: crash 2.6s cubic-bezier(.2, 1.6, .4, 1) forwards;
+  }
+  @keyframes crash {
+    0% { transform: translate(-50%, -50%) scale(.2) rotate(-14deg); opacity: 0; }
+    14% { transform: translate(-50%, -50%) scale(1.15) rotate(-6deg); opacity: 1; }
+    24%, 78% { transform: translate(-50%, -50%) scale(1) rotate(-6deg); opacity: 1; }
+    100% { transform: translate(-50%, -30%) scale(1) rotate(-6deg); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { .scene.quake { animation: none; } }
+  /* 이미 원리에 쓴 점: 가운데 흰 점 (다른 원리에 다시 쓸 수 없다) */
+  .dot.used::after { content: ""; position: absolute; inset: 34%; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.45); }
+  .turn .final { font-style: normal; font-size: 13px; font-weight: 700; color: #fff; background: var(--danger); border-radius: 999px; padding: 2px 10px; }
+  .dot.new { animation: drop .28s cubic-bezier(.3, 1.6, .5, 1); }
+  @keyframes drop { from { transform: translate(-50%, -50%) translateZ(60px) scale(.6); opacity: 0; } }
+
+  /* 점 고르기 + 기울기 */
+  .controls { display: grid; gap: 14px; margin-top: 14px; position: relative; z-index: 2; }
+  .hues { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .hue {
+    min-height: 48px; border-radius: var(--r); border: 2px solid var(--line); background: var(--panel);
+    display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; font-size: 14px; padding: 0 4px;
+  }
+  .hue i { width: 22px; height: 22px; border-radius: 50%; flex: none; }
+  .hue.on { border-color: var(--ink); }
+  @media (max-width: 520px) { .hue span { display: none; } }
+  .picker { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 10px; }
+  .size {
+    min-height: 60px; border-radius: var(--r); border: 2px solid var(--line); background: var(--panel);
+    display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 600; font-size: 15px;
+  }
+  .size i { border-radius: 50%; background: var(--cur); display: block; flex: none; }
+  .size small { color: var(--sub); font-weight: 500; }
+  .size.on { border-color: var(--ink); }
+  .size:disabled { opacity: .35; cursor: default; }
+  .picker .side { display: flex; gap: 10px; }
+  .picker .btn { min-height: 60px; border-radius: var(--r); flex: 1; white-space: nowrap; }
+  @media (max-width: 760px) { .picker { grid-template-columns: repeat(3, 1fr); } .picker .side { grid-column: 1 / -1; } .picker .btn { min-height: 44px; } }
+  @media (max-width: 520px) { .size small { display: block; } }
+  .pt.atk::before { border: 3px dashed #ff5a5a; box-shadow: 0 0 10px #ff5a5a; animation: pulse 1s infinite alternate; }
+  .gauge { display: grid; gap: 6px; }
+  .gauge .row { display: flex; justify-content: space-between; font-size: 14px; color: var(--sub); }
+  .gauge b { color: var(--ink); }
+  .bar { height: 12px; border-radius: 999px; background: #e6e2d8; overflow: hidden; }
+  .bar span { display: block; height: 100%; border-radius: 999px; background: var(--ok); transition: width .5s, background .5s; }
+
+  /* 옆 패널 */
+  aside { display: grid; gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; }
+  .card h2 { font-size: 14px; color: var(--sub); font-weight: 600; margin-bottom: 10px; display: flex; justify-content: space-between; }
+  .score { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 16px; }
+  .score .name { flex: 1; font-weight: 600; }
+  .score .left { color: var(--sub); font-size: 13px; }
+  .score .pts { font-weight: 800; font-size: 20px; min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+  .score.now { margin: 0 -10px; padding: 7px 10px; background: #f3f1ec; border-radius: 10px; }
+  .score.outp { opacity: .45; }
+  .princ { padding: 12px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 112px 1fr; gap: 12px; align-items: start; }
+  .illus { display: block; width: 100%; height: auto; border-radius: 10px; }
+  #introCards .princ { grid-template-columns: 220px 1fr; gap: 18px; padding: 16px 0; }
+  #introCards .princ h3 { font-size: 20px; }
+  #introCards .princ p { font-size: 15px; }
+  @media (max-width: 560px) { #introCards .princ { grid-template-columns: 1fr; } }
+  .sheet.wide { width: min(640px, 100%); }
+  .link { background: none; border: 0; padding: 0; min-height: 24px; color: var(--sub); font-size: 13px; font-weight: 600; text-decoration: underline; }
+  /* 판 위의 원리 표식: 그림 + 이름 + 점수. 누르면 크게 보기 */
+  .badges { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; margin: 6px 0 2px; }
+  .badge {
+    display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 5px 10px 5px 5px; text-align: left;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; font-size: 14px; font-weight: 700; line-height: 1.3;
+  }
+  .badge .illus { width: 68px; flex: none; border-radius: 8px; }
+  .badge small { display: block; color: var(--sub); font-weight: 600; font-size: 12px; }
+  .badge.hit { animation: hit 1.2s; }
+  .badge.done { border: 2px solid var(--ok); }
+  .badge.done small { color: var(--ok); }
+  /* 점수판의 완성 표시 (원리 개수만큼의 동그라미) */
+  .got { display: inline-flex; gap: 4px; }
+  .got i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #b9b5aa; }
+  .got i.on { background: var(--ok); border-color: var(--ok); }
+  @media (max-width: 520px) { .badge { flex-direction: column; align-items: stretch; padding: 5px; text-align: center; } .badge .illus { width: 100%; } }
+  /* ── 휴대폰 ── 판을 화면 폭에 가깝게 키우고 덜 눕혀서 누르기 쉽게, 원리 표식은 한 줄 4칸으로 작게 */
+  body { touch-action: manipulation; }                       /* 두 번 눌러도 화면이 확대되지 않게 */
+  .board, .btn, .size, .hue, .badge, .seg button { -webkit-user-select: none; user-select: none; }
+  @media (max-width: 600px) {
+    :root { --W: min(92vw, 60vh); }
+    header { padding: 10px 12px; gap: 8px; }
+    header .btn, [data-theme] header .btn { min-height: 40px; padding: 0 9px; font-size: 13px; }
+    header h1, [data-theme] header h1 { font-size: 18px; white-space: nowrap; }
+    main { padding: 0 8px 28px; gap: 16px; }
+    .turn { font-size: 16px; gap: 8px; }
+    .hint { font-size: 13px; min-height: 0; }
+    .scene { height: calc(var(--W) * .98); }
+    .cam { transform: translateY(-2%) scale(.97) rotateX(22deg); }
+    .badges { grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 4px 0 0; }
+    .badge { flex-direction: column; align-items: stretch; gap: 2px; padding: 4px; min-height: 0; text-align: center; font-size: 12px; line-height: 1.25; }
+    .badge .illus { width: 100%; border-radius: 6px; }
+    .badge small { display: none; }
+    .badge.done span::before { content: "✓ "; color: var(--ok); }
+    .controls { gap: 10px; margin-top: 8px; }
+    .hues { gap: 6px; } .hue { min-height: 44px; }
+    .picker { gap: 8px; } .size { min-height: 54px; gap: 6px; font-size: 14px; }
+    .sheet { padding: 22px 18px; gap: 16px; border-radius: 18px; }
+    .sheet h2 { font-size: 24px; }
+    .overlay { padding: 12px; }
+    .tut { padding: 12px; } .tut p { font-size: 14px; }
+  }
+  /* 튜토리얼 안내 상자 */
+  .tut { background: var(--panel); border: 2px solid var(--ink); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 10px; margin: 8px 0 4px; }
+  .tut[hidden] { display: none; }
+  .tut-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--sub); font-weight: 600; }
+  .tut-body { display: flex; gap: 14px; align-items: flex-start; }
+  .tut-body .pic { width: 170px; flex: none; }
+  .tut h3 { font-size: 18px; letter-spacing: -0.01em; }
+  .tut h3 em { font-style: normal; color: var(--ok); font-size: 14px; margin-left: 8px; }
+  .tut p { font-size: 15px; }
+  @media (max-width: 520px) { .tut-body { flex-direction: column; } }
+  .pt.no { cursor: not-allowed; }
+  .princ:first-of-type { border-top: 0; padding-top: 0; }
+  .princ h3 { font-size: 16px; display: flex; justify-content: space-between; }
+  .princ h3 span { color: var(--sub); font-weight: 600; font-size: 14px; }
+  .princ p { font-size: 14px; color: var(--sub); }
+  .princ .how { color: var(--ink); }
+  .princ.hit { animation: hit 1.2s; }
+  @keyframes hit { 0%, 60% { background: #fff3c4; box-shadow: 0 0 0 8px #fff3c4; } }
+  .base { font-size: 14px; color: var(--sub); display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+  .base b { color: var(--ink); }
+  .base em { font-style: normal; color: var(--ink); font-weight: 600; }
+  .log { font-size: 14px; color: var(--sub); max-height: 170px; overflow: auto; display: grid; gap: 4px; }
+  .log b { color: var(--ink); }
+
+  /* 점수 알림 */
+  .toast {
+    position: absolute; left: 50%; top: 4px; transform: translateX(-50%);
+    background: rgba(28,28,30,.94); color: #fff; border-radius: 14px; padding: 8px 16px;
+    font-size: 15px; z-index: 5; pointer-events: none; text-align: center; max-width: 92%;
+    animation: toast 2.4s forwards;
+  }
+  .toast b { font-size: 19px; }
+  .toast .p { color: #ffd95a; display: block; font-size: 14px; }
+  @keyframes toast { 0% { opacity: 0; margin-top: 8px; } 8%, 85% { opacity: 1; margin-top: 0; } 100% { opacity: 0; } }
+
+  /* 겹침 창 */
+  /* 첫 화면 */
+  .titlescreen {
+    position: fixed; inset: 0; z-index: 40; background: #15161a; color: #fff; cursor: pointer;
+    display: grid; place-content: center; justify-items: center; gap: 14px; padding: 24px; text-align: center;
+  }
+  .titlescreen[hidden] { display: none; }
+  .title-art { width: min(78vw, 46vh, 420px); animation: rock 4.5s ease-in-out infinite alternate; transform-origin: 50% 82%; }
+  .title-art svg { display: block; width: 100%; height: auto; overflow: visible; }
+  @keyframes rock { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
+  .titlescreen h1 { font-size: clamp(40px, 11vw, 76px); letter-spacing: -0.03em; line-height: 1.1; margin-top: 8px; }
+  .title-sub { color: #b9bcc8; font-size: clamp(15px, 4vw, 19px); }
+  .title-go { margin-top: 26px; font-size: 16px; font-weight: 700; color: #fff; animation: blink 1.4s ease-in-out infinite alternate; }
+  @keyframes blink { from { opacity: 1; } to { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .title-art, .title-go { animation: none; } }
+
+  .title-art { color: #fff; }
+
+  /* ════════ 테마 ════════
+     html[data-theme="…"] 로 갈아입힌다. 새 테마(예: 화가 컨셉)를 더하려면
+     ① 여기에 [data-theme="새이름"] 규칙 묶음을 하나 더 쓰고 ② 스크립트의 THEMES 목록에 한 줄을 더하면 된다. */
+  /* A · 아틀리에 — 밝은 종이 위에 굵은 먹선, 눌리는 느낌의 두툼한 버튼 (Duolingo의 버튼 턱 + neal.fun의 굵은 테두리) */
+  html[data-theme="a"] { --bg: #fff8ea; --panel: #ffffff; --ink: #1d1d1f; --sub: #6f6a60; --line: #1d1d1f; --r: 14px; }
+  [data-theme="a"] .btn { border: 2px solid var(--ink); border-radius: 14px; box-shadow: 0 4px 0 var(--ink); font-weight: 800; min-height: 48px; transition: transform .08s, box-shadow .08s; }
+  [data-theme="a"] .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+  [data-theme="a"] .btn:disabled { box-shadow: 0 4px 0 var(--ink); }
+  [data-theme="a"] .btn.primary { background: #ff5a3c; color: #fff; border-color: var(--ink); }
+  [data-theme="a"] .card, [data-theme="a"] .sheet, [data-theme="a"] .tut { border: 2px solid var(--ink); box-shadow: 5px 5px 0 var(--ink); }
+  [data-theme="a"] .badge, [data-theme="a"] .size, [data-theme="a"] .hue, [data-theme="a"] .seg button, [data-theme="a"] .inp { border: 2px solid var(--ink); }
+  [data-theme="a"] .size.on, [data-theme="a"] .hue.on, [data-theme="a"] .seg button.on, [data-theme="a"] .score.now { background: #ffd84d; }
+  [data-theme="a"] .badge.done { background: #c9f5d6; border-color: var(--ink); }
+  [data-theme="a"] .bar { background: #f1e6cf; border: 2px solid var(--ink); height: 16px; }
+  [data-theme="a"] .board { border: 3px solid var(--ink); box-shadow: 0 10px 0 var(--ink); border-radius: 20px; }
+  [data-theme="a"] .overlay { background: rgba(255, 248, 234, .95); }
+  [data-theme="a"] .fixed { background: #fff3d1; border: 2px dashed var(--ink); }
+  [data-theme="a"] header h1 { font-size: 24px; font-weight: 900; }
+  [data-theme="a"] .sheet h2 { font-weight: 900; }
+  [data-theme="a"] .titlescreen { background: #ffd84d; color: var(--ink); }
+  [data-theme="a"] .title-art { color: var(--ink); }
+  [data-theme="a"] .titlescreen h1 { font-weight: 900; }
+  [data-theme="a"] .title-sub { color: #4a4436; font-weight: 600; }
+  [data-theme="a"] .title-go { color: #fff; background: #ff5a3c; border: 2px solid var(--ink); border-radius: 14px; box-shadow: 0 4px 0 var(--ink); padding: 12px 22px; animation: none; }
+
+  /* B · 밤의 전시장 — 화면 전체가 어둡고 판이 조명받은 무대처럼, 강조색은 산호색 하나 (Apple Arcade의 어두운 무대 + 알약 버튼) */
+  html[data-theme="b"] { color-scheme: dark; --bg: #0c0d10; --panel: #191b20; --ink: #f5f5f7; --sub: #9a9da8; --line: #2b2e36; --board: #1e2129; --ok: #3ccf8e; }
+  [data-theme="b"] .btn { background: #23262d; border-color: #2f333c; }
+  [data-theme="b"] .btn.primary { background: #ff5b4d; border-color: #ff5b4d; color: #fff; }
+  [data-theme="b"] .card, [data-theme="b"] .badge, [data-theme="b"] .sheet { border: 0; }
+  [data-theme="b"] .size, [data-theme="b"] .hue, [data-theme="b"] .seg button, [data-theme="b"] .inp { background: #191b20; border-color: #2b2e36; }
+  [data-theme="b"] .size.on, [data-theme="b"] .hue.on, [data-theme="b"] .seg button.on { border-color: #f5f5f7; background: #262931; }
+  [data-theme="b"] .score.now, [data-theme="b"] .bar, [data-theme="b"] .fixed, [data-theme="b"] .peers .score { background: #262931; }
+  /* 어두운 바탕에 판이 묻히지 않게: 판을 한 단계 밝게, 가장자리에 밝은 테두리, 둘레에 조명 */
+  [data-theme="b"] .board { border: 1.5px solid #4a4f5c; box-shadow: 0 8px 0 #050506, 0 0 90px 10px rgba(255, 236, 200, .13); }
+  [data-theme="b"] .chip { box-shadow: 0 0 0 1.5px #4a4f5c; }
+  [data-theme="b"] .illus { box-shadow: 0 0 0 1px #33363f; }
+  [data-theme="b"] .overlay { background: rgba(8, 9, 11, .88); }
+  [data-theme="b"] .sheet { box-shadow: 0 24px 80px rgba(0, 0, 0, .6); }
+  [data-theme="b"] .toast { background: rgba(245, 245, 247, .97); color: #111; }
+  [data-theme="b"] .toast .p { color: #b45309; }
+  [data-theme="b"] .princ.hit, [data-theme="b"] .badge.hit { animation-name: hitDark; }
+  @keyframes hitDark { 0%, 60% { background: #4a3d12; box-shadow: 0 0 0 8px #4a3d12; } }
+  [data-theme="b"] .pivot { background: #3a3d46; box-shadow: 0 0 0 10px #2b2e36, 0 0 0 22px rgba(60, 64, 74, .35); }
+  [data-theme="b"] .titlescreen { background: radial-gradient(circle at 50% 36%, #2c2440 0, #0e0f12 62%); }
+  [data-theme="b"] .title-go { color: #ff8b80; }
+
+  /* 판 바로 위의 띠와 지우기 버튼: 지우기를 얻으면 튀어나오고, 쓸 수 있는 동안 계속 두근거린다 */
+  .boardbar { display: flex; justify-content: space-between; align-items: center; min-height: 52px; margin-top: 6px; position: relative; z-index: 3; }
+  .erasefab {
+    display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 4px 16px 4px 12px; border-radius: 999px;
+    border: 2px solid #1d1d1f; background: #ff5a3c; color: #fff; font-weight: 800; font-size: 16px; text-align: left; line-height: 1.2;
+    box-shadow: 0 4px 0 rgba(0, 0, 0, .4); margin-left: auto;
+    animation: fabpop .5s cubic-bezier(.3, 1.7, .5, 1), fabpulse .7s .5s ease-in-out infinite alternate;
+  }
+  .erasefab[hidden] { display: none; }
+  .erasefab small { display: block; font-weight: 600; font-size: 12px; opacity: .95; }
+  .erasefab i { width: 26px; height: 16px; border-radius: 4px; background: #fff; box-shadow: inset -9px 0 0 #ffc2b6; transform: rotate(-24deg); flex: none; }   /* 지우개 그림 */
+  .erasefab.on { background: #1d1d1f; animation: none; }
+  @keyframes fabpop { from { transform: scale(.2); opacity: 0; } }
+  @keyframes fabpulse { to { transform: scale(1.05); box-shadow: 0 4px 0 rgba(0, 0, 0, .4), 0 0 0 6px rgba(255, 90, 60, .28); } }
+  /* 지우는 효과: 지우개가 문지르고 지나가면 점이 흐려지며 지우개 가루가 흩어진다 */
+  .erasefx { position: absolute; width: 0; height: 0; transform: translateZ(8px); pointer-events: none; }
+  .erasefx u { position: absolute; border-radius: 50%; animation: fxfade .45s ease-in forwards; }
+  .erasefx b { position: absolute; left: -20px; top: -13px; width: 40px; height: 24px; border-radius: 6px; background: #fff;
+               box-shadow: inset -13px 0 0 #ff9d8c, 0 3px 0 rgba(0, 0, 0, .35); animation: fxrub .6s ease-in-out forwards; }
+  .erasefx i { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; opacity: 0; animation: fxcrumb .7s .15s ease-out forwards; }
+  @keyframes fxfade { 60% { opacity: .35; transform: scale(.9); } 100% { opacity: 0; transform: scale(.4); } }
+  @keyframes fxrub {
+    0% { transform: translate(-18px, -12px) rotate(-22deg); opacity: 0; } 12% { opacity: 1; }
+    30% { transform: translate(15px, 7px) rotate(-22deg); } 50% { transform: translate(-13px, 5px) rotate(-22deg); }
+    70% { transform: translate(13px, -5px) rotate(-22deg); opacity: 1; } 100% { transform: translate(4px, -34px) rotate(-22deg); opacity: 0; }
+  }
+  @keyframes fxcrumb { 0% { opacity: 1; transform: translate(0, 0); } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(.4); } }
+  @media (prefers-reduced-motion: reduce) { .erasefab { animation: none; } }
+  @media (max-width: 600px) { .boardbar { min-height: 46px; margin-top: 2px; } .erasefab { min-height: 42px; font-size: 14px; padding: 3px 12px 3px 10px; } .erasefab small { font-size: 11px; } }
+
+  /* 판의 옆면(절벽). 판 아래쪽 가장자리에 매달아 90도 접어 내린 조각이라, 판이 기울면 함께 움직인다. 섬 테마에서만 보인다 */
+  .cliff { display: none; }
+
+  /* C · 떠 있는 섬 — 평면 벡터 일러스트의 원리로 만든 테마
+     ① 그러데이션 대신 2~3단계의 납작한 색면  ② 윗면은 밝게, 옆면은 중간, 아래는 어둡게(두께가 보이게)
+     ③ 따뜻한 흙빛 주인공 + 차가운 하늘빛 배경(보색에 가까운 대비)  ④ 그림자는 검정이 아니라 보랏빛  ⑤ 둥글고 불규칙한 윤곽 */
+  html[data-theme^="m-"] {
+    --bg: #9cc7b6; --panel: #fff6e2; --ink: #3b1f47; --sub: #7b5d6c; --line: #3b1f47; --r: 16px;
+    --board: #f8e2b4; --lit: #3b1f47; --dim: rgba(59, 31, 71, .32); --spot: rgba(150, 84, 44, .5);
+    --ok: #2f8f5b; --danger: #d2452d;
+  }
+  [data-theme^="m-"] body {
+    background-color: #9cc7b6; background-attachment: fixed;
+    background-image:
+      radial-gradient(70px 26px at 10% 16%, #f6efd9 97%, transparent 100%), radial-gradient(44px 24px at 13% 13.5%, #f6efd9 97%, transparent 100%),
+      radial-gradient(90px 30px at 88% 30%, #f6efd9 97%, transparent 100%), radial-gradient(52px 28px at 84% 27%, #f6efd9 97%, transparent 100%),
+      radial-gradient(60px 22px at 22% 82%, #efe6c8 97%, transparent 100%), radial-gradient(80px 26px at 76% 90%, #efe6c8 97%, transparent 100%),
+      linear-gradient(#8fc3b6 0%, #b7cba3 55%, #dccb8e 100%);
+  }
+  [data-theme^="m-"] .btn { background: #ffc85e; border: 2px solid var(--ink); border-radius: 14px; box-shadow: 0 4px 0 #a1532d; font-weight: 800; min-height: 48px; transition: transform .08s, box-shadow .08s; }
+  [data-theme^="m-"] .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #a1532d; }
+  [data-theme^="m-"] .btn:disabled { box-shadow: 0 4px 0 #a1532d; }
+  [data-theme^="m-"] .btn.primary { background: #e4572e; color: #fff; box-shadow: 0 4px 0 #8f2f1b; }
+  [data-theme^="m-"] .card, [data-theme^="m-"] .sheet, [data-theme^="m-"] .tut { border: 2px solid var(--ink); box-shadow: 0 7px 0 #b9623a; border-radius: 18px; }
+  [data-theme^="m-"] .badge, [data-theme^="m-"] .size, [data-theme^="m-"] .hue, [data-theme^="m-"] .seg button, [data-theme^="m-"] .inp { border: 2px solid var(--ink); background: var(--panel); }
+  [data-theme^="m-"] .size.on, [data-theme^="m-"] .hue.on, [data-theme^="m-"] .seg button.on, [data-theme^="m-"] .score.now { background: #ffd27a; }
+  [data-theme^="m-"] .badge.done { background: #c7ecc9; border-color: var(--ink); }
+  [data-theme^="m-"] .bar { background: #ecdcb4; border: 2px solid var(--ink); height: 16px; }
+  [data-theme^="m-"] .fixed, [data-theme^="m-"] .peers .score { background: #ffeac0; }
+  [data-theme^="m-"] .overlay { background: rgba(140, 190, 176, .93); }
+  [data-theme^="m-"] .toast { background: rgba(59, 31, 71, .95); }
+  [data-theme^="m-"] header h1, [data-theme^="m-"] .sheet h2 { font-weight: 900; }
+  [data-theme^="m-"] .hint, [data-theme^="m-"] .turn small, [data-theme^="m-"] .gauge .row, [data-theme^="m-"] .netinfo { color: #4f3a56; }
+  /* 판 = 섬의 윗면: 밝은 모래색에 조금 더 밝은 길 얼룩, 가장자리는 흙빛 */
+  [data-theme^="m-"] .board {
+    background-color: var(--board); border: 3px solid #d48a3a; border-radius: 30px; box-shadow: none;
+    background-image: radial-gradient(34% 16% at 28% 26%, #fdf0d0 97%, transparent 100%), radial-gradient(40% 18% at 66% 62%, #fdf0d0 97%, transparent 100%), radial-gradient(22% 10% at 30% 82%, #fdf0d0 97%, transparent 100%);
+  }
+  [data-theme^="m-"] .board.danger { box-shadow: 0 0 0 5px rgba(210, 69, 45, .75); }
+  /* 섬의 옆면: 위에서부터 흙빛 → 붉은 흙 → 보랏빛 그늘의 세 띠, 아래쪽은 들쭉날쭉한 바위 */
+  [data-theme^="m-"] .cliff {
+    display: block; position: absolute; left: 4%; right: 4%; top: calc(100% - 2px); height: 34%; pointer-events: none;
+    transform-origin: top center; transform: rotateX(-90deg);
+    background: linear-gradient(#d48a3a 0 9%, #b9623a 9% 30%, #8a4660 30% 58%, #5a3160 58% 100%);
+    clip-path: polygon(0 0, 100% 0, 98% 30%, 94% 46%, 90% 34%, 84% 62%, 78% 48%, 71% 80%, 64% 58%, 56% 92%, 49% 66%, 42% 100%, 35% 70%, 28% 86%, 21% 54%, 14% 70%, 8% 42%, 3% 52%);
+  }
+  [data-theme^="m-"] .scene { margin-bottom: calc(var(--W) * .11); }   /* 절벽이 아래 버튼에 가리지 않게 자리를 둔다 */
+  [data-theme^="m-"] .pivot { display: none; }
+  [data-theme^="m-"] .shadow { background: radial-gradient(closest-side, rgba(59, 31, 71, .28), rgba(59, 31, 71, 0)); transform: translateZ(-150px); }
+  [data-theme^="m-"] .dot { box-shadow: 0 5px 0 rgba(120, 60, 40, .38); background-image: radial-gradient(circle at 34% 28%, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 40%); }
+  [data-theme^="m-"] .dot.used::after { background: var(--ink); box-shadow: 0 0 0 1.5px #fff; }
+  [data-theme^="m-"] .crash { color: #fff6e2; -webkit-text-stroke: 3px var(--ink); text-shadow: 0 8px 0 #b9623a; }
+  [data-theme^="m-"] .titlescreen { color: var(--ink); background-color: #9cc7b6;
+    background-image:
+      radial-gradient(110px 38px at 16% 20%, #f6efd9 97%, transparent 100%), radial-gradient(66px 36px at 21% 16.5%, #f6efd9 97%, transparent 100%),
+      radial-gradient(130px 42px at 82% 70%, #f6efd9 97%, transparent 100%), radial-gradient(76px 40px at 77% 66%, #f6efd9 97%, transparent 100%),
+      radial-gradient(80px 28px at 78% 14%, #efe6c8 97%, transparent 100%),
+      linear-gradient(#8fc3b6 0%, #b7cba3 55%, #dccb8e 100%); }
+  [data-theme^="m-"] .title-art { color: var(--ink); }
+  [data-theme^="m-"] .titlescreen h1 { font-weight: 900; text-shadow: 0 5px 0 #f8e2b4; }
+  [data-theme^="m-"] .title-sub { color: #4f3a56; font-weight: 600; }
+  [data-theme^="m-"] .title-go { color: #fff; background: #e4572e; border: 2px solid var(--ink); border-radius: 14px; box-shadow: 0 4px 0 #8f2f1b; padding: 12px 22px; animation: none; }
+
+  /* ── 맵별 색감: 위의 공통 틀(m-…)에 색만 갈아 끼운다. 사막(m-desert)은 공통 틀의 색 그대로 ── */
+  /* 얼음 바다 — 프리드리히 「얼음 바다」: 창백한 푸른빛과 흰 얼음, 차갑고 고요한 하늘 */
+  html[data-theme="m-ice"] { --bg: #b4d0df; --panel: #f4fbff; --ink: #1f3347; --sub: #55708a; --line: #1f3347; --board: #edf7fc; --lit: #1f3347; --dim: rgba(31, 51, 71, .3); --spot: rgba(60, 110, 150, .5); }
+  [data-theme="m-ice"] body { background-color: #b4d0df; background-image: radial-gradient(90px 26px at 14% 12%, #eef6fa 97%, transparent 100%), radial-gradient(120px 30px at 82% 20%, #eef6fa 97%, transparent 100%), linear-gradient(#93b6cb 0%, #c9dde8 55%, #e9f1f4 100%); }
+  [data-theme="m-ice"] .btn { background: #cfe8f5; box-shadow: 0 4px 0 #5b86a6; }
+  [data-theme="m-ice"] .btn:active { box-shadow: 0 1px 0 #5b86a6; } [data-theme="m-ice"] .btn:disabled { box-shadow: 0 4px 0 #5b86a6; }
+  [data-theme="m-ice"] .btn.primary { background: #2f7fb8; box-shadow: 0 4px 0 #1e557e; }
+  [data-theme="m-ice"] .card, [data-theme="m-ice"] .sheet, [data-theme="m-ice"] .tut { box-shadow: 0 7px 0 #7fa9c4; }
+  [data-theme="m-ice"] .size.on, [data-theme="m-ice"] .hue.on, [data-theme="m-ice"] .seg button.on, [data-theme="m-ice"] .score.now { background: #bfe3f7; }
+  [data-theme="m-ice"] .bar { background: #d5e6ef; } [data-theme="m-ice"] .fixed, [data-theme="m-ice"] .peers .score { background: #dceef7; }
+  [data-theme="m-ice"] .overlay { background: rgba(170, 203, 221, .93); }
+  [data-theme="m-ice"] .hint, [data-theme="m-ice"] .turn small, [data-theme="m-ice"] .gauge .row, [data-theme="m-ice"] .netinfo { color: #33506a; }
+  [data-theme="m-ice"] .board { border-color: #9cc4dc; background-image: linear-gradient(115deg, transparent 0 22%, #fff 22% 27%, transparent 27% 58%, #fff 58% 61%, transparent 61%), linear-gradient(70deg, transparent 0 70%, #d7ecf5 70% 76%, transparent 76%); }
+  [data-theme="m-ice"] .cliff { background: linear-gradient(#cfe8f5 0 9%, #8fb8d2 9% 30%, #5f8fb0 30% 58%, #3c6a8c 58% 100%); }
+  [data-theme="m-ice"] .dot { box-shadow: 0 5px 0 rgba(40, 80, 110, .32); }
+  [data-theme="m-ice"] .crash { text-shadow: 0 8px 0 #5f8fb0; }
+  /* 폭풍 — 터너 「눈보라」: 잿빛과 누런 빛이 소용돌이치는 어두운 하늘 */
+  html[data-theme="m-storm"] { --bg: #565d67; --panel: #f1ead8; --ink: #22262d; --sub: #5b5f66; --line: #22262d; --board: #ddd5bf; --lit: #22262d; --dim: rgba(34, 38, 45, .3); --spot: rgba(70, 66, 56, .5); }
+  [data-theme="m-storm"] body { background-color: #565d67; background-image: radial-gradient(circle at 50% 38%, #e9dcae 0, #bdb18d 16%, #7a7d82 44%, #3d424b 100%); }
+  [data-theme="m-storm"] .btn { background: #e3c66c; box-shadow: 0 4px 0 #7a6426; }
+  [data-theme="m-storm"] .btn:active { box-shadow: 0 1px 0 #7a6426; } [data-theme="m-storm"] .btn:disabled { box-shadow: 0 4px 0 #7a6426; }
+  [data-theme="m-storm"] .btn.primary { background: #b5472a; box-shadow: 0 4px 0 #6f2715; }
+  [data-theme="m-storm"] .card, [data-theme="m-storm"] .sheet, [data-theme="m-storm"] .tut { box-shadow: 0 7px 0 #2d3138; }
+  [data-theme="m-storm"] .size.on, [data-theme="m-storm"] .hue.on, [data-theme="m-storm"] .seg button.on, [data-theme="m-storm"] .score.now { background: #ecd98e; }
+  [data-theme="m-storm"] .bar { background: #cfc7b0; } [data-theme="m-storm"] .fixed, [data-theme="m-storm"] .peers .score { background: #e6dcc0; }
+  [data-theme="m-storm"] .overlay { background: rgba(70, 76, 86, .92); }
+  [data-theme="m-storm"] header h1, [data-theme="m-storm"] .turn, [data-theme="m-storm"] .hint, [data-theme="m-storm"] .turn small, [data-theme="m-storm"] .gauge .row, [data-theme="m-storm"] .gauge b, [data-theme="m-storm"] .netinfo, [data-theme="m-storm"] .mapinfo { color: #f4ecd6; }
+  [data-theme="m-storm"] .pips i { border-color: #f4ecd6; } [data-theme="m-storm"] .pips i.on { background: #f4ecd6; }
+  [data-theme="m-storm"] .board { border-color: #8c8368; background-image: radial-gradient(60% 40% at 50% 45%, #efe6c8 0, transparent 70%); }
+  [data-theme="m-storm"] .cliff { background: linear-gradient(#a59a78 0 9%, #6f6a5c 9% 30%, #4a4c54 30% 58%, #2f3238 58% 100%); }
+  [data-theme="m-storm"] .dot { box-shadow: 0 5px 0 rgba(40, 40, 40, .4); }
+  [data-theme="m-storm"] .crash { text-shadow: 0 8px 0 #2d3138; }
+  /* 씨름판 — 김홍도 「씨름」: 한지 바탕, 먹선, 옅은 담채. 판 가운데에 둥근 모래판 */
+  html[data-theme="m-ssireum"] { --bg: #e9d8b3; --panel: #f8eed6; --ink: #2b2622; --sub: #6d6253; --line: #2b2622; --board: #f3e6c4; --lit: #2b2622; --dim: rgba(43, 38, 34, .3); --spot: rgba(110, 90, 60, .5); --danger: #9c3b2a; }
+  [data-theme="m-ssireum"] body { background-color: #e9d8b3; background-image: repeating-linear-gradient(92deg, rgba(120, 95, 55, .05) 0 2px, transparent 2px 9px), repeating-linear-gradient(3deg, rgba(120, 95, 55, .04) 0 1px, transparent 1px 13px); }
+  [data-theme="m-ssireum"] .btn { background: #f8eed6; box-shadow: 0 4px 0 #2b2622; }
+  [data-theme="m-ssireum"] .btn:active { box-shadow: 0 1px 0 #2b2622; } [data-theme="m-ssireum"] .btn:disabled { box-shadow: 0 4px 0 #2b2622; }
+  [data-theme="m-ssireum"] .btn.primary { background: #9c3b2a; box-shadow: 0 4px 0 #5e2218; }
+  [data-theme="m-ssireum"] .card, [data-theme="m-ssireum"] .sheet, [data-theme="m-ssireum"] .tut { box-shadow: 5px 6px 0 #2b2622; border-radius: 8px; }
+  [data-theme="m-ssireum"] .size.on, [data-theme="m-ssireum"] .hue.on, [data-theme="m-ssireum"] .seg button.on, [data-theme="m-ssireum"] .score.now { background: #e6cb92; }
+  [data-theme="m-ssireum"] .bar { background: #ddcaa0; } [data-theme="m-ssireum"] .fixed, [data-theme="m-ssireum"] .peers .score { background: #efdfb9; }
+  [data-theme="m-ssireum"] .overlay { background: rgba(225, 206, 164, .94); }
+  [data-theme="m-ssireum"] .hint, [data-theme="m-ssireum"] .turn small, [data-theme="m-ssireum"] .gauge .row, [data-theme="m-ssireum"] .netinfo { color: #5a4f41; }
+  [data-theme="m-ssireum"] .board { border-color: #2b2622; border-radius: 14px; background-image: radial-gradient(circle at 50% 50%, #f7ecc9 0 43%, #cdb27a 43% 44.5%, transparent 44.5%); }
+  [data-theme="m-ssireum"] .cliff { background: linear-gradient(#c9b384 0 9%, #a8905f 9% 30%, #7b6845 30% 58%, #55472f 58% 100%); }
+  [data-theme="m-ssireum"] .dot { box-shadow: 0 5px 0 rgba(60, 45, 25, .35); }
+  [data-theme="m-ssireum"] .crash { text-shadow: 0 8px 0 #7b6845; }
+
+  /* 판 바깥 장식: 판 뒤에 깔리는 그림 한 장 (맵마다 다르다). 누르는 데 방해되지 않게 클릭을 받지 않는다 */
+  .decor { position: absolute; left: 50%; top: 50%; width: min(118%, 980px); transform: translate(-50%, -50%); pointer-events: none; z-index: 0; }
+  .decor svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .cam { z-index: 1; }
+  @media (max-width: 600px) { .decor { width: 128%; opacity: .9; } }
+  /* 판 위 띠 왼쪽의 맵 효과 안내 */
+  .mapinfo { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.35; padding-right: 10px; }
+  .mapinfo small { display: block; font-weight: 500; color: inherit; opacity: .8; }
+  /* 돌풍·밀어내기로 움직인 점: 원래 있던 쪽에서 미끄러져 들어온다 */
+  .dot.blown { animation: blown .55s cubic-bezier(.2, .9, .3, 1); }
+  @keyframes blown { from { transform: translate(calc(-50% + var(--bx)), calc(-50% + var(--by))) translateZ(2px); } }
+  /* 맵 고르기 카드 */
+  .mapgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .mapcard { display: grid; gap: 4px; text-align: left; padding: 8px 10px 10px; border-radius: 12px; border: 2px solid var(--line); background: var(--panel); color: var(--ink); }
+  .mapcard.on { outline: 3px solid var(--ok); outline-offset: 1px; }
+  .mapcard .sw { display: grid; grid-template-columns: repeat(4, 1fr); height: 22px; border-radius: 6px; overflow: hidden; border: 1px solid rgba(0, 0, 0, .3); }
+  .mapcard b { font-size: 15px; } .mapcard small { font-size: 12px; color: var(--sub); line-height: 1.35; }
+  @media (max-width: 420px) { .mapgrid { grid-template-columns: 1fr; } }
+
+  /* 테마 고르기 창: 테마마다 색 견본과 이름이 있는 카드 */
+  .themes { display: grid; gap: 12px; }
+  .themecard { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; text-align: left; padding: 12px; border-radius: 14px; border: 2px solid var(--line); background: var(--panel); color: var(--ink); }
+  .themecard.on { outline: 3px solid var(--ok); outline-offset: 2px; }
+  .themecard .sw { display: grid; grid-template-columns: repeat(2, 26px); grid-auto-rows: 26px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(0, 0, 0, .25); }
+  .themecard b { display: block; font-size: 17px; }
+  .themecard small { color: var(--sub); font-size: 14px; }
+  .title-theme { position: absolute; right: 14px; top: 14px; min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1.5px solid currentColor; background: none; color: inherit; font-weight: 700; font-size: 14px; }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(243,241,236,.92); z-index: 20;
+    display: grid; place-items: center; padding: 20px; overflow: auto;
+  }
+  .overlay[hidden] { display: none; }
+  .sheet {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 22px;
+    padding: 30px; width: min(540px, 100%); display: grid; gap: 20px;
+  }
+  .sheet h2 { font-size: 28px; letter-spacing: -0.02em; line-height: 1.25; }
+  .sheet p { color: var(--sub); }
+  .field { display: grid; gap: 8px; }
+  .field > span { font-size: 14px; color: var(--sub); font-weight: 600; }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
+  .seg button { min-height: 48px; border-radius: 12px; border: 2px solid var(--line); background: var(--panel); font-weight: 600; }
+  .seg button.on { border-color: var(--ink); }
+  .seg button small { display: block; font-weight: 500; color: var(--sub); font-size: 12px; }
+  .fixed { margin: 0; padding: 14px 18px 14px 34px; background: var(--bg); border-radius: 12px; font-size: 14px; color: var(--sub); display: grid; gap: 4px; }
+  .rules { display: grid; gap: 10px; font-size: 15px; color: var(--ink); padding: 0; margin: 0; list-style: none; }
+  .rules b { display: inline-block; min-width: 3.2em; }
+  .rank { display: grid; gap: 6px; }
+  .rank .score { font-size: 18px; }
+  .acts { display: flex; gap: 10px; flex-wrap: wrap; }
+  .acts .btn { flex: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .board, .dot, .bar span { transition-duration: .01s; }
+    .dot.new, .pt.tgt::before { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="gameName"></h1>
+  <span class="netinfo" id="netInfo"></span>
+  <button class="btn" id="btnHome">처음</button>
+  <button class="btn" id="btnRules">규칙</button>
+  <button class="btn" id="btnNew">새 게임</button>
+</header>
+
+<main>
+  <section>
+    <div class="turn" id="turn"></div>
+    <div class="hint" id="hint"></div>
+    <div class="badges" id="badges"></div>
+    <div class="tut" id="tut" hidden></div>
+    <!-- 판 바로 위의 띠: 오른쪽에 지우기 버튼이 나타난다 (왼쪽은 나중에 맵 효과 예보 자리) -->
+    <div class="boardbar"><span class="mapinfo" id="mapInfo"></span><button class="erasefab" id="btnErase" hidden></button></div>
+    <div class="scene" id="scene">
+      <div class="decor" id="decor"></div>
+      <div class="cam">
+        <div class="shadow"></div>
+        <div class="pivot"></div>
+        <div class="board" id="board"></div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="hues" id="hues"></div>
+      <div class="picker" id="picker"></div>
+      <div class="gauge">
+        <div class="row"><span>판의 기울기 <b id="riskTxt">0%</b></span><span>100%가 되면 판이 떨어집니다</span></div>
+        <div class="bar"><span id="riskBar" style="width:0"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card"><h2><span>점수</span><span id="round"></span></h2><div id="scores"></div></div>
+    <div class="card"><h2><span>이번 판의 조형 원리</span><button class="link" id="btnIntro">크게 보기</button></h2><div id="cards"></div></div>
+    <div class="card">
+      <h2>기본 점수 (조형 요소)</h2>
+      <div class="base">
+        <b>점</b><span>빈 자리에 놓는다 · <em>소 1 · 중 2 · 대 3</em></span>
+        <b>색</b><span>점의 색은 직접 고른다 · 테두리 선의 종류가 주인</span>
+        <b>명암</b><span>큰 점일수록 색이 진하고 무겁다</span>
+        <b>선</b><span>내 점 둘을 잇는다 · <em>+1</em></span>
+        <b>면</b><span>선이 닫혀 안쪽이 생긴다 · <em>+2</em></span>
+        <b>형</b><span id="shapeList"></span>
+      </div>
+    </div>
+    <div class="card"><h2>기록</h2><div class="log" id="log"></div></div>
+  </aside>
+</main>
+
+<!-- 시작 화면 -->
+<!-- 게임 중에 나가려 할 때 묻는 창 -->
+<div class="overlay" id="ask" hidden style="z-index:55">
+  <div class="sheet">
+    <div><h2>나갈까요?</h2><p id="askMsg"></p></div>
+    <div class="acts">
+      <button class="btn primary" id="btnAskNo">계속하기</button>
+      <button class="btn" id="btnAskYes">나가기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 테마 고르기 -->
+<div class="overlay" id="themes" hidden style="z-index:50">
+  <div class="sheet">
+    <div><h2>테마</h2><p>화면의 분위기를 고릅니다. 이 기기에만 적용되고, 규칙은 달라지지 않습니다.</p></div>
+    <div class="themes" id="themeList"></div>
+    <button class="btn primary" id="btnThemesClose">닫기</button>
+  </div>
+</div>
+
+<!-- 첫 화면: 아무 곳이나 누르면 시작 화면으로 넘어간다 -->
+<div class="titlescreen" id="title" role="button" tabindex="0" aria-label="게임 시작">
+  <button class="title-theme" id="btnThemeTitle">테마</button>
+  <div class="title-art" id="titleArt"></div>
+  <h1 id="titleName"></h1>
+  <p class="title-sub">판이 와르르 무너지기 전에, 점·선·면으로 작품을 완성하라</p>
+  <p class="title-go">화면을 터치하면 시작합니다</p>
+</div>
+
+<!-- 어떻게 할지 고르기: 한 기기로 / 방 만들기 / 방 참가 -->
+<div class="overlay" id="mode" hidden>
+  <div class="sheet">
+    <div><h2>어떻게 할까요?</h2><p>한 기기를 돌려 가며 하거나, 방을 만들어 각자 기기로 함께 할 수 있습니다.</p></div>
+    <button class="btn primary" id="btnLocal">한 기기로 함께 하기</button>
+    <div class="divider">각자 기기로</div>
+    <div class="field"><span>내 별명 (비워 두면 선 이름으로 불립니다)</span>
+      <input class="inp" id="nick" maxlength="8" placeholder="예: 3모둠 민트" autocomplete="off"></div>
+    <button class="btn" id="btnCreate">방 만들기</button>
+    <div class="joinrow">
+      <input class="inp" id="joinCode" maxlength="4" inputmode="numeric" placeholder="방 번호 4자리" autocomplete="off">
+      <button class="btn" id="btnJoin">방 참가</button>
+    </div>
+    <p class="note" id="modeNote"></p>
+    <button class="link" id="btnModeHome">← 처음 화면으로</button>
+  </div>
+</div>
+
+<!-- 대기실 -->
+<div class="overlay" id="lobby" hidden>
+  <div class="sheet">
+    <div><p>방 번호</p><div class="roomcode" id="roomCode">----</div><p class="note" id="lobbyNote"></p></div>
+    <div class="peers" id="peerList"></div>
+    <div id="lobbyHost" class="stack" hidden>
+      <div class="field"><span>판 크기</span>
+        <div class="seg" data-key="size"><button data-v="9">9 × 9<small>작은 판</small></button><button data-v="11" class="on">11 × 11<small>보통</small></button><button data-v="13">13 × 13<small>넓은 판</small></button></div>
+      </div>
+      <div class="field"><span>맵</span><div class="mapgrid" data-maps></div></div>
+    </div>
+    <div class="acts">
+      <button class="btn primary" id="btnLobbyStart" hidden>게임 시작</button>
+      <button class="btn" id="btnLobbyLeave">방 나가기</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="setup" hidden>
+  <div class="sheet">
+    <div>
+      <h2>점을 놓고, 선으로 잇고,<br>면과 형을 만드세요</h2>
+      <p>이번 판의 조형 원리를 모두 완성하면 우승입니다. 판의 균형이 무너지지 않게, 한 기기를 돌려 가며 합니다.</p>
+    </div>
+    <div class="field"><span>인원</span>
+      <div class="seg" data-key="n"><button data-v="2">2명</button><button data-v="3">3명</button><button data-v="4" class="on">4명</button></div>
+    </div>
+    <div class="field"><span>판 크기</span>
+      <div class="seg" data-key="size"><button data-v="9">9 × 9<small>작은 판</small></button><button data-v="11" class="on">11 × 11<small>보통</small></button><button data-v="13">13 × 13<small>넓은 판</small></button></div>
+    </div>
+    <div class="field"><span>맵 (맵마다 모습과 효과가 다릅니다)</span>
+      <div class="mapgrid" data-maps></div>
+    </div>
+    <div class="field"><span>컴퓨터 상대 (위 인원에 포함 · 혼자 하려면 2명에 컴퓨터 1명)</span>
+      <div class="seg" data-key="ai"><button data-v="0" class="on">없음</button><button data-v="1">1명</button><button data-v="2">2명</button><button data-v="3">3명</button></div>
+    </div>
+    <div class="field"><span>컴퓨터 실력</span>
+      <div class="seg" data-key="level"><button data-v="easy">쉬움</button><button data-v="mid" class="on">보통</button><button data-v="hard">어려움</button></div>
+    </div>
+    <ul class="fixed">
+      <li>한 차례에 행동 3번 (점 놓기 또는 선 긋기)</li>
+      <li>조형 원리 4가지를 모두 완성하면 우승</li>
+      <li>원리를 하나 완성할 때마다 상대의 소 점 1개 지우기</li>
+      <li>판을 떨어뜨리면 그 사람이 패배</li>
+    </ul>
+    <div class="acts">
+      <button class="btn primary" id="btnStart">시작하기</button>
+      <button class="btn" id="btnTut">처음이라면 튜토리얼</button>
+    </div>
+    <button class="link" id="btnBackMode">← 방식 다시 고르기 (각자 기기로 하려면)</button>
+  </div>
+</div>
+
+<!-- 이번 판의 조형 원리 안내 (시작 직후, 그리고 '크게 보기') -->
+<div class="overlay" id="intro" hidden>
+  <div class="sheet wide">
+    <div>
+      <h2>이번 판의 조형 원리</h2>
+      <p>여기 나온 원리를 모두 완성하면 우승입니다(같은 바퀴에 여럿이면 점수로). 원리마다 새 점으로 따로 만들어야 합니다. 게임 중에는 판 위의 표식을 눌러 다시 볼 수 있습니다.</p>
+    </div>
+    <div id="introCards"></div>
+    <p id="introStart"></p>
+    <button class="btn primary" id="btnIntroClose">확인했어요</button>
+  </div>
+</div>
+
+<!-- 규칙 -->
+<div class="overlay" id="rules" hidden>
+  <div class="sheet">
+    <h2>규칙</h2>
+    <ul class="rules">
+      <li><b>순서</b> 첫 판은 먼저 둘 사람을 추첨으로 정하고, ‘같은 설정으로 다시’를 누르면 다음 사람부터 시작합니다. 여러 판을 하면 모두가 각 순서를 돌아가며 맡게 됩니다.</li>
+      <li><b>차례</b> 한 차례에 행동을 3번 합니다. 행동은 ‘점 놓기’ 또는 ‘선 긋기’ 중에서 고릅니다. 4명일 때는 마지막 순서인 사람만 첫 차례에 2번 합니다(뒤에 두는 사람이 유리한 것을 맞추는 보정).</li>
+      <li><b>점</b> 빈 자리를 누르면 고른 크기의 점이 놓입니다. 큰 점일수록 무겁고, 가운데에서 멀수록 판을 더 기울입니다.</li>
+      <li><b>선</b> 내 점을 누른 뒤 다른 내 점을 누르면 선이 그어집니다. 선은 4칸까지, 다른 점을 지나가거나 남의 선을 가로지를 수 없습니다. (내 선끼리는 겹쳐도 됩니다.)</li>
+      <li><b>면·형</b> 선이 닫히면 면이 되고, 그 모양에 따라 삼각형·사각형·오각형·육각형·별이 됩니다. 별은 점 5개를 하나씩 건너뛰며 한붓그리기로 이으면 됩니다. 면의 안쪽과 선 위에는 누구도 점을 놓을 수 없습니다.</li>
+      <li><b>색</b> 점의 색은 놓을 때마다 6가지 중에서 고릅니다. 누구의 점·선인지는 흰 고리와 선의 종류(직선·물결선·지그재그선·점선)로 구분합니다. 차례인 사람의 것만 밝게 보입니다. 큰 점일수록 색이 진합니다(어두운 색은 무거워 보입니다).</li>
+      <li><b>색 관계</b> 색상환 순서는 빨강·주황·노랑·초록·파랑·보라입니다. 이웃한 색은 유사색, 마주 보는 색(빨강↔초록, 주황↔파랑, 노랑↔보라)은 보색입니다. 면은 꼭짓점 색을 섞은 색으로 칠해집니다.</li>
+      <li><b>우승</b> 이번 판에 공개된 조형 원리 4가지를 모두 완성하면 우승입니다. 누군가 완성하면 그 바퀴 끝까지 두고 끝나며(3명 판에서 마지막 순서인 사람이 끝내면, 첫 순서인 사람이 행동 1번을 더 합니다), 같은 바퀴에 여럿이 완성하면 점수가 높은 사람이 이깁니다. 점수까지 같으면 먼저 완성한 사람이 우승입니다.</li>
+      <li><b>원리 인정</b> 한 번의 행동으로는 원리 하나만 인정됩니다. 원리에 쓴 점은 가운데에 흰 점이 생기고, 다른 원리에 다시 쓸 수 없습니다.</li>
+      <li><b>지우기</b> 원리를 하나 완성할 때마다 지우기 1회를 얻고, 바로 쓸 수 있습니다. 점이 지워진 사람은 자기 다음 차례가 올 때까지 ‘보호 중’이 되어 다시 지워지지 않습니다. 내 차례에 ‘지우기’를 누르고 상대의 소 점을 누르면 그 점과 이어진 선·면이 사라지고, 점은 주인 손으로 돌아갑니다. 원리에 이미 쓴 점(가운데 흰 점)과 중·대 점은 지울 수 없습니다. 지워서 판이 떨어지면 지운 사람 책임입니다. 지우기는 행동 횟수를 쓰지 않습니다.</li>
+      <li><b>끝</b> 판을 떨어뜨리면 그 사람이 패배하고 판이 끝납니다. 아무도 모두 완성하지 못한 채 점을 다 놓았거나 정해진 바퀴가 끝나면, 완성한 원리가 많은 사람이 이기고 같으면 점수로 정합니다.</li>
+    </ul>
+    <button class="btn primary" id="btnRulesClose">닫기</button>
+  </div>
+</div>
+
+<!-- 결과 -->
+<div class="overlay" id="result" hidden>
+  <div class="sheet">
+    <div><h2 id="resTitle"></h2><p id="resSub"></p></div>
+    <div class="rank" id="resRank"></div>
+    <div class="acts">
+      <button class="btn primary" id="btnAgain">같은 설정으로 다시</button>
+      <button class="btn" id="btnSetup">설정 바꾸기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ───────── 바꾸기 쉬운 값 모음 ─────────
+// hue: 6색상환에서의 자리(빨강0 주황1 노랑2 초록3 파랑4 보라5). 3칸 차이 = 보색, 1칸 차이 = 유사색
+// tones: 점 크기(무게) 1·2·3의 색. 무거울수록 진하다(명도가 낮다)
+// 누구의 점·선인지는 '빛나는 외곽선' 색(color)으로 구분한다. 점 안쪽 색은 놓는 사람이 고른다.
+// 사람은 '선의 종류'로 구분한다: 점 둘레의 흰 고리와 긋는 선이 그 종류로 그려진다
+const PLAYERS = [
+  { name: '직선',       bs: 'straight' },
+  { name: '물결선',     bs: 'wavy' },
+  { name: '지그재그선', bs: 'zigzag' },
+  { name: '점선',       bs: 'dotted' },
+];
+const LIT = 'var(--lit)', DIM = 'var(--dim)';   // 실제 색은 테마가 정한다 (어두운 판에서는 흰색, 밝은 판에서는 짙은 색)
+// (예전 값) '#ffffff', '#7d808c'   // 차례인 사람의 고리·선은 밝게, 나머지는 흐리게
+
+// 점 둘레의 고리 (점·사람 표시가 함께 쓴다)
+function ringSvg(bs, col) {
+  const R = .8, f = v => v.toFixed(3);
+  const poly = (n, rad) => 'M' + Array.from({ length: n }, (_, i) => { const t = i / n * 2 * Math.PI, r = rad(i, t); return `${f(r * Math.cos(t))} ${f(r * Math.sin(t))}`; }).join('L') + 'Z';
+  let body;
+  if (bs === 'dotted') {
+    body = Array.from({ length: 10 }, (_, i) => { const t = i / 10 * 2 * Math.PI; return `<circle cx="${f(R * Math.cos(t))}" cy="${f(R * Math.sin(t))}" r=".105" style="fill:${col}"/>`; }).join('');
+  } else {
+    const d = bs === 'wavy'   ? poly(144, (i, t) => R + .085 * Math.sin(12 * t))   // 잔물결: 촘촘하고 낮게
+            : bs === 'zigzag' ? poly(20, i => R + (i % 2 ? -.15 : .15))              // 톱니: 빽빽하고 뾰족하게
+            : poly(48, () => R);
+    body = `<path d="${d}" fill="none" style="stroke:${col}" stroke-width="2.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+  }
+  return `<svg class="ring" viewBox="-1 -1 2 2">${body}</svg>`;
+}
+
+// 두 점을 잇는 선 (판 SVG 안, 단위는 칸)
+function lineSvg(bs, a, b, col, halo) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy), nx = -dy / len, ny = dx / len;
+  const P = (t, off) => `${(a[0] + dx * t + nx * off).toFixed(3)} ${(a[1] + dy * t + ny * off).toFixed(3)}`;
+  let pts = [P(0, 0), P(1, 0)], attr = 'stroke-width=".1"';
+  if (bs === 'wavy') {
+    const n = Math.max(2, Math.round(len / .3)), steps = n * 12;          // 잔물결: 한 칸에 세 번쯤
+    pts = Array.from({ length: steps + 1 }, (_, i) => P(i / steps, .065 * Math.sin(2 * Math.PI * n * i / steps)));
+    attr = 'stroke-width=".08"';
+  } else if (bs === 'zigzag') {
+    const n = Math.max(3, Math.round(len / .2));                          // 톱니: 빽빽하고 뾰족하게
+    pts = [P(0, 0), ...Array.from({ length: n }, (_, i) => P((i + .5) / n, i % 2 ? -.1 : .1)), P(1, 0)];
+    attr = 'stroke-width=".05" stroke-linejoin="miter"';
+  } else if (bs === 'dotted') {
+    attr = 'stroke-width=".17" stroke-dasharray="0 .3"';
+  }
+  const straight = `M${P(0, 0)}L${P(1, 0)}`;
+  return (halo ? `<path class="mark" d="${straight}" style="stroke:${col}" stroke-width=".34" stroke-linecap="round" opacity=".13"/>` : '')
+    + `<path class="mark" d="M${pts.join('L')}" fill="none" style="stroke:${col}" stroke-linecap="round" ${attr.includes('linejoin') ? '' : 'stroke-linejoin="round"'} ${attr}/>`;
+}
+// 고를 수 있는 색: 6색상환 순서(3칸 차이 = 보색, 이웃 = 유사색)
+// tones: 점 크기(무게) 1·2·3의 색. 무거울수록 진하다(명도가 낮다)
+const HUES = [
+  { name: '빨강', tones: { 1: '#ff5a60', 2: '#e3212a', 3: '#a30d16' } },
+  { name: '주황', tones: { 1: '#ffa341', 2: '#f57a00', 3: '#b24f00' } },
+  { name: '노랑', tones: { 1: '#ffe14a', 2: '#f2bf00', 3: '#ad8400' } },
+  { name: '초록', tones: { 1: '#3ddc8c', 2: '#12a558', 3: '#0a6d39' } },
+  { name: '파랑', tones: { 1: '#5c96ff', 2: '#1f61ee', 3: '#1741ad' } },
+  { name: '보라', tones: { 1: '#b672ff', 2: '#8733dd', 3: '#5a1ea3' } },
+];
+const dotColor = c => HUES[c.h].tones[c.w];
+// 여러 색을 섞은 색(면을 칠할 때 쓴다). 보색끼리 섞이면 회색에 가까워진다
+function mixHues(hs) {
+  const rgb = [0, 0, 0];
+  hs.forEach(h => { const v = parseInt(HUES[h].tones[2].slice(1), 16); rgb[0] += v >> 16; rgb[1] += (v >> 8) & 255; rgb[2] += v & 255; });
+  return `rgb(${rgb.map(v => Math.round(v / hs.length)).join(',')})`;
+}
+// 조형 원리 예시 그림 (카드·안내 화면·튜토리얼이 함께 쓴다). 색 카드에는 색상환이 함께 나온다
+function illus(id) {
+  const f = v => v.toFixed(1);
+  const dot = (x, y, w, h) => { const r = [0, 5, 8, 11][w];
+    return `<circle cx="${x}" cy="${y}" r="${r + 3.4}" fill="none" stroke="#fff" stroke-width="1.2"/><circle cx="${x}" cy="${y}" r="${r}" fill="${HUES[h].tones[w]}"/>`; };
+  const tri = (hs, ws, ox) => { const p = [[ox, 24], [ox + 56, 24], [ox + 28, 78]];
+    return `<polygon points="${p.map(q => q.join(',')).join(' ')}" fill="${mixHues(hs)}" fill-opacity=".5" stroke="#fff" stroke-width="1.6"/>` + p.map((q, i) => dot(q[0], q[1], ws[i], hs[i])).join(''); };
+  const wheel = on => { const cx = 52, cy = 50, r = 27; let s = '';
+    HUES.forEach((h, i) => {
+      const a0 = (-120 + i * 60) * Math.PI / 180, a1 = a0 + Math.PI / 3, am = (a0 + a1) / 2, lit = on.includes(i);
+      s += `<path d="M${cx} ${cy}L${f(cx + r * Math.cos(a0))} ${f(cy + r * Math.sin(a0))}A${r} ${r} 0 0 1 ${f(cx + r * Math.cos(a1))} ${f(cy + r * Math.sin(a1))}Z" fill="${h.tones[2]}" opacity="${lit ? 1 : .38}" stroke="#15161a" stroke-width="1.5"/>`
+        + `<text x="${f(cx + (r + 12) * Math.cos(am))}" y="${f(cy + (r + 12) * Math.sin(am) + 3)}" text-anchor="middle" font-size="8.5" font-weight="${lit ? 700 : 400}" fill="${lit ? '#fff' : '#8f93a0'}">${h.name}</text>`;
+    });
+    return s; };
+  const body = {
+    repeat:   () => '<path d="M60 50H140" stroke="#fff" stroke-width="1.6"/>' + dot(60, 50, 2, 4) + dot(100, 50, 2, 4) + dot(140, 50, 2, 4),
+    grad:     () => '<path d="M56 50H148" stroke="#fff" stroke-width="1.6"/>' + dot(56, 50, 1, 4) + dot(100, 50, 2, 4) + dot(148, 50, 3, 4),
+    contrast: () => tri([0, 0, 0], [3, 1, 1], 72),
+    emph:     () => dot(100, 50, 3, 1) + dot(70, 50, 1, 1) + dot(130, 50, 1, 1) + dot(100, 21, 1, 1) + dot(100, 79, 1, 1),
+    balance:  () => '<path d="M58 26L142 74M142 26L58 74" stroke="#8f93a0" stroke-width="1" stroke-dasharray="3 3"/><circle cx="100" cy="50" r="4" fill="none" stroke="#8d877a" stroke-width="1.5"/>'
+                  + dot(58, 26, 2, 3) + dot(142, 74, 2, 3) + dot(142, 26, 1, 3) + dot(58, 74, 1, 3),
+    variety:  () => tri([4, 4, 4], [1, 2, 3], 72),
+    unity:    () => wheel([0]) + tri([0, 0, 0], [2, 2, 2], 122),
+    analog:   () => wheel([0, 1, 2]) + tri([0, 1, 2], [2, 2, 2], 122),
+    comp:     () => wheel([0, 3]) + '<path d="M52 30V70" stroke="#fff" stroke-width="1.4" stroke-dasharray="3 2"/>' + tri([0, 3, 0], [2, 2, 2], 122),
+  }[id]();
+  // 그림 속 흰 선·어두운 바탕도 테마 색을 따르게 바꾼다
+  const themed = body.replaceAll('stroke="#fff"', 'style="stroke:var(--lit)"').replaceAll('fill="#fff"', 'style="fill:var(--lit)"')
+    .replaceAll('fill="#8f93a0"', 'style="fill:var(--dim)"').replaceAll('stroke="#8f93a0"', 'style="stroke:var(--dim)"').replaceAll('stroke="#15161a"', 'style="stroke:var(--board)"');
+  return `<svg class="illus" viewBox="0 0 200 100" role="img"><rect width="200" height="100" rx="10" style="fill:var(--board)"/>${themed}</svg>`;
+}
+
+// 튜토리얼 단계. done(e): 방금 한 행동 e로 이 단계를 해냈는지 / info: 읽기만 하는 단계
+const TUT = [
+  { t: '점 놓기', b: '판의 빈 자리를 눌러 점을 하나 놓아 보세요. 점은 가장 작은 조형 요소입니다. 놓으면 크기만큼 점수를 얻습니다(소 1 · 중 2 · 대 3). 휴대폰에서는 한 번 누르면 미리보기가 뜨고, 같은 자리를 한 번 더 누르면 놓입니다.',
+    done: e => e.type === 'dot' },
+  { t: '크기와 무게', b: '아래에서 <b>대</b>를 고르고 판의 가장자리 쪽에 놓아 보세요. 큰 점은 색이 진하고 무거워서, 판이 그쪽으로 기웁니다.',
+    done: e => e.type === 'dot' && e.w === 3 },
+  { t: '균형 잡기', b: '아래 <b>판의 기울기</b> 막대를 보세요. 100%가 되면 판이 떨어지고, 떨어뜨린 사람이 집니다. 반대편에 점을 놓아 기울기를 줄여 보세요.',
+    done: e => e.type === 'dot' && e.after < e.before },
+  { t: '색 고르기', b: '점의 색은 놓을 때마다 고릅니다. 빨강이 아닌 <b>다른 색</b>을 골라 점을 놓아 보세요. 누구의 점인지는 색이 아니라 점 둘레 고리의 선 종류(직선·물결선·지그재그선·점선)로 구분합니다.',
+    done: e => e.type === 'dot' && e.h !== 0 },
+  { t: '선 긋기', b: '내 점을 누른 다음, 점선 고리가 뜬 다른 내 점을 누르면 선이 그어집니다(+1). 선은 4칸까지 이을 수 있고, 다른 점을 지나갈 수 없습니다. 가까운 두 점을 이어 보세요. 가까운 점이 없으면 점을 더 놓으세요.',
+    done: e => e.type === 'line' },
+  { t: '면과 형', b: '점 세 개를 선으로 이어 닫아 보세요. 선이 닫히면 <b>면</b>(+2)이 되고, 모양에 따라 <b>형</b> 점수를 받습니다(삼각형 +2 · 사각형 +3 · 오각형 +5 · 별 +10).',
+    done: e => e.type === 'line' && e.shape },
+  { t: '놓을 수 없는 자리', b: '면의 안쪽과 선 위에는 누구도 점을 놓을 수 없습니다. 남의 선을 가로질러 선을 그을 수도 없습니다. 그래서 좋은 자리를 먼저 차지하고, 면을 넓게 만들어 상대가 놓을 자리를 줄이는 것이 중요합니다.',
+    info: true },
+  { t: '조형 원리 ① 반복', illus: 'repeat', b: '실제 게임에서는 판마다 조형 원리 4가지가 공개되고, <b>모두 완성한 사람이 우승</b>합니다. 먼저 <b>반복</b>입니다. 같은 크기의 점 3개를 같은 간격으로 한 줄에 놓고, 이웃한 점끼리 선으로 이어 보세요.',
+    done: e => e.cards.includes('repeat') },
+  { t: '조형 원리 ② 조화', illus: 'analog', b: '색상환에서 이웃한 색은 자연스럽게 어울립니다. <b>빨강·주황·노랑</b>처럼 이웃한 색의 점 3개를 놓고, 선으로 이어 면을 닫아 보세요. 면은 꼭짓점 색이 섞인 색으로 칠해집니다.',
+    done: e => e.cards.includes('analog') },
+  { t: '준비 끝!', b: '실제 게임에서는 한 차례에 행동(점 놓기 또는 선 긋기)을 정해진 횟수만큼 하고 다음 사람에게 넘깁니다. 공개된 조형 원리를 모두 완성하면 우승, 판을 떨어뜨리면 패배입니다. 원리에 쓴 점은 다른 원리에 다시 쓸 수 없으니, 원리마다 새 점으로 따로 만들어야 합니다.',
+    info: true, last: true },
+];
+
+const SIZE_NAME = { 1: '소', 2: '중', 3: '대' };
+const DOT_RATIO = { 1: .34, 2: .48, 3: .62 };  // 한 칸 대비 점 지름
+const PIECES = { 9: [6, 4, 4], 11: [7, 5, 4], 13: [8, 6, 4] };  // 판 크기별 한 사람의 소·중·대 개수
+const MAX_ANGLE = 15;                            // 떨어지기 직전의 기울기(도)
+const LIMIT_PER_RADIUS = 8;                     // 한계 = 이 값 × 판 반지름(칸)
+const MAX_LINE = 4;                              // 선 하나의 최대 길이(칸)
+const FALL_PENALTY = 10;
+const FACE_PTS = 2;
+const SHAPE_PTS = { '삼각형': 2, '사각형': 3, '오각형': 5, '육각형': 6, '다각형': 6, '별': 10 };
+
+// ───────── 맵 ─────────
+// 맵마다 모습(색감·판 바깥 장식)과 효과가 다르다. 새 맵은 ① 여기 한 줄 ② decorSvg의 그림 ③ 스타일의 [data-theme="m-id"] 색 묶음을 더한다.
+// 효과 값: limitK = 무너지는 한계에 곱하는 값(작을수록 쉽게 무너짐) / gust = 바퀴마다 돌풍 / push = 밀어내기
+const MAPS = [
+  { id: 'desert',  name: '사막',     art: '파울 클레의 튀니지 수채화에서',   rule: '특별한 효과가 없는 평온한 맵',                                   sw: ['#9cc7b6', '#f8e2b4', '#e9a13b', '#b8475a'] },
+  { id: 'ice',     name: '얼음 바다', art: '프리드리히 「얼음 바다」에서',     rule: '미끄러운 판 · 다른 맵보다 쉽게 무너집니다', limitK: .8,            sw: ['#93b6cb', '#edf7fc', '#5f8fb0', '#1f3347'] },
+  { id: 'storm',   name: '폭풍',     art: '터너 「눈보라」에서',             rule: '바퀴가 끝날 때마다 돌풍 · 묶이지 않은 점이 한 칸 밀립니다', gust: true, sw: ['#3d424b', '#ddd5bf', '#e3c66c', '#b5472a'] },
+  { id: 'ssireum', name: '씨름판',   art: '김홍도 「씨름」에서',             rule: '밀어내기 · 옆에 있는 더 작은 상대 점을 한 칸 밀어냅니다', push: true,  sw: ['#e9d8b3', '#f3e6c4', '#2b2622', '#9c3b2a'] },
+];
+const MAP_NONE = { id: 'none', name: '', rule: '' };       // 튜토리얼처럼 맵이 없는 판
+const GUSTS = [[1, 0, '→'], [-1, 0, '←'], [0, 1, '↓'], [0, -1, '↑']];
+// 씨앗으로 만드는 무작위 수: 온라인 방에서 모든 기기가 같은 돌풍 방향을 얻도록, 게임을 바꾸는 무작위는 이것만 쓴다
+function seededRand(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+// 판 바깥 장식 그림 (가로 900 × 세로 620, 가운데는 판에 가려지므로 양옆과 모서리에 그린다). 작품을 베끼지 않고 색과 형태의 특징만 옮겼다
+function decorSvg(id) {
+  const R = (x, y, w, h, f) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${f}"/>`;
+  const P = (pts, f) => `<polygon points="${pts}" fill="${f}"/>`;
+  let s = '';
+  if (id === 'desert') {
+    // 색 조각을 쌓아 만든 집과 둥근 지붕, 야자수, 해 — 클레의 따뜻한 색면 모자이크
+    const town = x => R(x, 372, 58, 70, '#e9a13b') + R(x + 58, 392, 46, 50, '#d9683c') + R(x + 14, 318, 44, 54, '#f0cf7a') + R(x + 62, 340, 40, 52, '#6aa39a')
+      + R(x, 442, 110, 62, '#c98a4a') + R(x + 22, 462, 16, 26, '#5a3160') + R(x + 70, 458, 18, 18, '#8a4660')
+      + `<path d="M${x + 14} 318a22 22 0 0 1 44 0z" fill="#b8475a"/>` + R(x + 78, 322, 8, 18, '#b8475a');
+    const palm = (x, y) => `<path d="M${x} ${y}q-6 -60 4 -120" stroke="#7a4a2a" stroke-width="7" fill="none" stroke-linecap="round"/>`
+      + [-70, -35, 0, 35, 70].map(a => `<path d="M${x + 4} ${y - 120}q${Math.sin(a / 57) * 40} ${-30 + Math.abs(a) / 4} ${Math.sin(a / 57) * 62} ${10 + Math.abs(a) / 3}" stroke="#3f8a5c" stroke-width="9" fill="none" stroke-linecap="round"/>`).join('');
+    s = town(8) + palm(132, 372) + town(784) + palm(772, 392)
+      + '<circle cx="838" cy="96" r="38" fill="#f0cf7a"/><circle cx="838" cy="96" r="26" fill="#e9a13b"/>'
+      + R(20, 110, 34, 34, '#d9683c') + R(54, 130, 26, 26, '#f0cf7a') + R(28, 144, 26, 30, '#6aa39a')
+      + '<path d="M0 560q110 -40 220 -6v66H0z" fill="#e9a13b"/><path d="M680 566q120 -46 220 -8v62H680z" fill="#d9903a"/>';
+  } else if (id === 'ice') {
+    // 비스듬히 솟은 얼음 조각들과 그 사이에 기운 배 — 날카로운 사선과 차가운 색
+    s = P('0,600 30,330 96,600', '#a9cfe2') + P('40,620 118,250 168,620', '#ffffff') + P('96,620 150,380 214,620', '#d7ecf5') + P('0,620 0,500 70,620', '#7fa9c4')
+      + P('900,600 868,300 800,600', '#a9cfe2') + P('862,620 780,220 728,620', '#ffffff') + P('800,620 750,400 690,620', '#d7ecf5') + P('900,620 900,480 838,620', '#7fa9c4')
+      + P('20,150 70,60 110,170', '#d7ecf5') + P('60,180 96,96 150,190', '#ffffff')
+      + '<g transform="translate(806 150) rotate(24)">' + P('-44,0 44,0 30,22 -34,22', '#5b4a3f') + '<path d="M-6 0V-70M-6 -64L26 -30" stroke="#5b4a3f" stroke-width="4" fill="none"/></g>'
+      + P('740,190 800,120 880,200', '#ffffff') + P('700,210 760,170 800,214', '#a9cfe2');
+  } else if (id === 'storm') {
+    // 화면 전체를 휘감는 소용돌이, 기운 증기선, 거친 물결 — 터너의 소용돌이 구도
+    const swirl = (r, w, c, o, rot) => `<circle cx="450" cy="300" r="${r}" fill="none" stroke="${c}" stroke-width="${w}" stroke-dasharray="${(r * 2.2).toFixed(0)} ${(r * 1.2).toFixed(0)}" opacity="${o}" transform="rotate(${rot} 450 300)" stroke-linecap="round"/>`;
+    s = swirl(300, 46, '#e9dcae', .55, 20) + swirl(360, 40, '#2f3238', .5, 140) + swirl(420, 44, '#c9c3ae', .5, 250) + swirl(480, 50, '#2f3238', .45, 60) + swirl(250, 30, '#8a8f98', .5, 200)
+      + '<g transform="translate(96 470) rotate(-14)">' + P('-56,0 56,0 40,24 -44,24', '#22262d') + '<path d="M0 0V-92" stroke="#22262d" stroke-width="5"/><path d="M0 -84L42 -52" stroke="#22262d" stroke-width="3"/>' + R(-18, -22, 14, 22, '#22262d')
+      + '<path d="M-10 -26q-30 -30 -4 -58q-34 -6 -30 -40" stroke="#4a4c54" stroke-width="12" fill="none" stroke-linecap="round" opacity=".8"/></g>'
+      + '<path d="M0 560q40 -30 80 0t80 0t80 0v60H0z" fill="#2f3238"/><path d="M660 566q40 -32 80 0t80 0t80 0v54H660z" fill="#3d424b"/>'
+      + '<path d="M0 590q40 -24 80 0t80 0t80 0" stroke="#e9dcae" stroke-width="5" fill="none" opacity=".7"/><path d="M670 594q40 -24 80 0t80 0t70 0" stroke="#e9dcae" stroke-width="5" fill="none" opacity=".7"/>';
+  } else if (id === 'ssireum') {
+    // 판을 둥글게 둘러앉은 구경꾼, 엿장수, 벗어 놓은 신발 — 먹선과 옅은 담채, 원형 구도
+    const man = (x, y, k, robe, gat, flip) => `<g transform="translate(${x} ${y}) scale(${flip ? -k : k} ${k})" stroke="#2b2622" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M-26 36C-30 8 -15 -8 0 -8C15 -8 30 8 26 36Z" fill="${robe}"/><path d="M-12 14q12 9 24 0" fill="none"/>
+      <circle cx="0" cy="-20" r="11" fill="#f0d9b5"/>
+      ${gat ? '<ellipse cx="0" cy="-30" rx="21" ry="5" fill="#2b2622"/><path d="M-8 -31L-6 -46H6L8 -31Z" fill="#2b2622"/>' : '<circle cx="0" cy="-34" r="5" fill="#2b2622"/>'}</g>`;
+    const robes = ['#dfe6dc', '#f3ead2', '#d9c2a8', '#c9d3dc', '#ffffff', '#e8d3b0'];
+    const col = (xs, flip) => [130, 218, 306, 394, 482].map((y, i) => man(xs[i % 2], y, 1.05, robes[(i + (flip ? 2 : 0)) % 6], (i + (flip ? 1 : 0)) % 3 !== 1, flip)).join('');
+    s = col([58, 112], false) + col([842, 788], true)
+      // 엿장수: 서서 엿판을 멘 사람
+      + `<g transform="translate(86 64)" stroke="#2b2622" stroke-width="2.4" stroke-linejoin="round"><path d="M-14 46C-18 10 -8 -6 0 -6C8 -6 18 10 14 46Z" fill="#f3ead2"/><circle cx="0" cy="-18" r="10" fill="#f0d9b5"/><circle cx="0" cy="-30" r="4.5" fill="#2b2622"/><rect x="-30" y="10" width="60" height="12" fill="#c9a26a"/><path d="M-24 10L-10 -6M24 10L10 -6" fill="none"/></g>`
+      // 벗어 놓은 신발 두 켤레와 부채
+      + [[792, 566], [820, 578], [752, 584], [778, 596]].map(([x, y], i) => `<ellipse cx="${x}" cy="${y}" rx="15" ry="6.5" fill="${i < 2 ? '#f8eed6' : '#c9a26a'}" stroke="#2b2622" stroke-width="2.2" transform="rotate(-18 ${x} ${y})"/>`).join('')
+      + '<path d="M96 560L140 520A62 62 0 0 1 176 566Z" fill="#f8eed6" stroke="#2b2622" stroke-width="2.4" stroke-linejoin="round"/><path d="M96 560L158 536M96 560L170 552" stroke="#2b2622" stroke-width="1.6"/>';
+  }
+  return `<svg viewBox="0 0 900 620" role="img" aria-hidden="true">${s}</svg>`;
+}
+
+// 조형 원리 카드: 새 원리는 여기에 한 항목만 더하면 된다
+const PRINCIPLES = [
+  { id: 'repeat',   name: '반복', pts: 4, desc: '같은 요소를 되풀이해 질서와 리듬을 만든다.', how: '같은 크기의 내 점 3개를 같은 간격으로 한 줄에 놓고 선으로 잇기' },
+  { id: 'grad',     name: '점이', pts: 4, desc: '크기가 단계적으로 서서히 변한다.',           how: '내 점 소 → 중 → 대를 같은 간격으로 한 줄에 놓고 선으로 잇기' },
+  { id: 'contrast', name: '대비', pts: 4, desc: '반대되는 요소를 함께 두어 차이를 부각한다.', how: '대 점과 소 점만으로(중 없이) 면을 닫기' },
+  { id: 'emph',     name: '강조', pts: 4, desc: '한 부분을 두드러지게 해 시선을 모은다.',     how: '큰 점 하나의 바로 둘레에, 그보다 작은 같은 크기의 내 점 4개 (중+소 4 · 대+소 4 · 대+중 4)' },
+  { id: 'balance',  name: '균형', pts: 4, desc: '가운데를 기준으로 무게가 양쪽에 고르게 놓인다(대칭 균형).', how: '판 가운데를 사이에 두고 마주 보는 자리에 같은 크기의 내 점 놓기 · 2쌍' },
+  { id: 'variety',  name: '변화', pts: 3, desc: '단조로움을 없애고 화면에 활기를 더한다.',     how: '소·중·대가 모두 들어간 면을 닫기' },
+  // 색 카드(hue: true): 면을 닫을 때 꼭짓점 점들의 색으로 판정. 매 판 1장은 꼭 나온다
+  { id: 'unity',  name: '통일',      pts: 3, hue: true, desc: '같은 색으로 화면에 일관성과 질서를 준다.',                       how: '한 가지 색의 점만으로 면을 닫기' },
+  { id: 'analog', name: '조화',      pts: 4, hue: true, desc: '색상환에서 이웃한 유사색은 자연스럽게 어우러진다.',             how: '이웃한 색끼리만(예: 빨강·주황·노랑) 2가지 이상으로 면을 닫기' },
+  { id: 'comp',   name: '보색 대비', pts: 3, hue: true, desc: '색상환에서 마주 보는 색을 함께 쓰면 서로 더 선명해 보인다.',     how: '보색(빨강↔초록, 주황↔파랑, 노랑↔보라)이 함께 들어간 면을 닫기' },
+];
+
+// ───────── 상태 ─────────
+const opt = { n: 4, size: 11, acts: 3, goal: 4, mode: 'end', attack: 'on', finish: 'auto', rotate: false, delay: 'auto', handicap: 'auto',
+  shield: true, startMode: 'random',                 // 지우기 보호막 / 시작 순서 추첨
+  plusActs: 0,
+  seatDots: [], seatErasers: [], seatDelay: [],      // 순서별 보정 시험용: 소 점 가감 / 시작 지우기 / 지우기를 다음 차례부터 쓰는 순서
+  pushFrom: 1,                                      // 씨름판: 몇 번째 바퀴부터 밀어내기를 쓸 수 있는가
+  map: 'desert',                                    // 고른 맵 (MAPS의 id)
+  ai: 0, level: 'mid',                              // 컴퓨터 상대 인원(전체 인원에 포함) / 실력 'easy' | 'mid' | 'hard'
+  hitCap: 0,                                        // 한 사람이 한 판에 지워질 수 있는 최대 횟수 (0 = 제한 없음)
+  erStart: 0, erPer: 'principle', erCost: false };   // 지우기를 처음에 몇 개 주는지 / 어떻게 얻는지 / 행동을 쓰는지   // handicap[자리]: 첫 바퀴에 덜 받는 행동 수   // attack: 지우기(공격) 규칙 'on' | 'off'   // goal: 완성해야 하는 조형 원리 개수
+let S = null;
+// 온라인 방 상태 (한 기기 모드에서는 on === false 이고 나머지는 쓰이지 않는다)
+const NET = { on: false, sb: null, ch: null, id: '', code: '', host: false, name: '', at: 0, seat: -1, peers: [], init: null, log: [], replay: false };
+let nextStart = null;     // '다시 하기'로 시작할 때 먼저 둘 사람 (없으면 추첨)
+const $ = id => document.getElementById(id);
+const key = (x, y) => x + ',' + y;
+const unkey = k => k.split(',').map(Number);
+
+// pre: 온라인 방에서 방장이 정해 보낸 값 { n, size, cards, start, names } — 모두 같은 판으로 시작하게 한다
+function newGame(tut = false, pre = null) {
+  // 튜토리얼은 혼자서, 작은 판에서, 점을 넉넉히 가지고 한다
+  const N = tut ? 9 : pre ? pre.size : opt.size, n = tut ? 1 : pre ? pre.n : opt.n, R = (N - 1) / 2, goal = tut ? 3 : opt.goal;
+  // 완성할 원리가 3개보다 많으면 한 개당 점을 4개(소 2 · 중 1 · 대 1)씩 더 준다
+  const [s, m, l] = tut ? [30, 30, 30] : PIECES[N].map((v, i) => v + (goal - 3) * [2, 1, 1][i]);
+  // 시작하는 사람: 첫 판은 추첨, '다시 하기'는 지난 판에서 한 자리 밀어서 (nextStart)
+  const start = pre ? pre.start : tut || opt.startMode === 'fixed' ? 0 : (nextStart === null ? Math.floor(Math.random() * n) : nextStart % n);
+  nextStart = null;
+  const aiN = tut || pre ? 0 : Math.min(opt.ai, n - 1);   // 컴퓨터 상대 수 (사람이 적어도 한 명은 있어야 한다)
+  const map = tut ? MAP_NONE : MAPS.find(m => m.id === (pre ? pre.map : opt.map)) || MAPS[0];
+  const seed = pre && pre.seed ? pre.seed : Math.floor(Math.random() * 2147483647);
+  S = {
+    N, R, map, limit: LIMIT_PER_RADIUS * R * (map.limitK || 1),
+    rand: seededRand(seed), gust: null, pushed: false, blown: null,   // 맵 효과에 쓰는 무작위·돌풍 방향·이번 차례 밀어내기 사용 여부
+    cells: Array.from({ length: N }, () => Array(N).fill(null)),
+    players: PLAYERS.slice(0, n).map((p, i) => ({
+      name: pre && pre.names[i] ? pre.names[i] : i >= n - aiN ? (aiN > 1 ? `컴퓨터 ${i - (n - aiN) + 1}` : '컴퓨터') : p.name, bs: p.bs, score: 0,
+      ai: i >= n - aiN,                            // 뒤쪽 자리부터 컴퓨터가 맡는다
+      pieces: { 1: s, 2: m, 3: l }, fallen: false, done: new Set(),            // done: 완성한 원리
+      erasers: tut ? 0 : opt.erStart, newErasers: 0, shield: false, hits: 0,                             // shield: 지워진 뒤 내 다음 차례까지 보호 / hits: 지워진 횟수
+    })),
+    adj: PLAYERS.slice(0, n).map(() => new Map()),   // 플레이어별 선 연결
+    lines: [], faces: [],
+    cards: [], tut: tut ? { step: 0, ok: false } : null,
+    start, oi: 0, order: Array.from({ length: n }, (_, i) => (start + i) % n),   // 이번 바퀴의 차례 순서와 그 안의 위치
+    final: false, finalLeft: new Set(), fullOrder: [],
+    // 선후공 보정 (원리 4가지 기준으로 봇 대국에서 맞춘 값): 4명이면 마지막 순서인 사람만 첫 차례에 행동 1번 적게. 2~3명은 보정 없음.
+    // 지우기는 얻으면 바로 쓸 수 있다 (delay는 시험용으로만 남겨 둔 값)
+    delay: opt.delay === 'on',
+    handicap: tut ? [] : opt.handicap === 'auto' ? (n >= 4 ? Array.from({ length: n }, (_, i) => i === n - 1 ? 1 : 0) : []) : opt.handicap,
+    attack: !tut && opt.attack === 'on', erase: false,     // erase: 지금 지울 점을 고르는 중인가
+    cur: start, acts: opt.acts, round: 1, maxRounds: Math.ceil((s + m + l) * 2 / opt.acts) + 1,
+    sel: 1, hue: 0, from: null, last: null, emph: new Set(), locked: false, over: false,
+  };
+  S.acts -= S.handicap[0] || 0;
+  // 순서별 보정(시험용 값, 기본은 모두 없음): 소 점 개수 더하기·빼기, 처음에 갖고 시작하는 지우기
+  if (!tut) S.order.forEach((seat, pos) => { S.players[seat].pieces[1] += opt.seatDots[pos] || 0; S.players[seat].erasers += opt.seatErasers[pos] || 0; });
+  if (map.gust) S.gust = GUSTS[Math.floor(S.rand() * 4)];     // 첫 돌풍 방향을 미리 정해 예보한다
+  // 원리 카드 뽑기: 색 카드 1장은 꼭 넣고 나머지는 무작위
+  S.cards = (tut ? ['repeat', 'analog', 'balance'] : pre ? pre.cards : drawCards(goal)).map(id => PRINCIPLES.find(c => c.id === id));
+  $('log').innerHTML = '';
+  $('result').hidden = true;
+  $('board').className = 'board';
+  $('board').style.opacity = ''; $('board').style.transition = '';     // 무너지는 연출이 바꿔 놓은 것을 되돌린다
+  $('scene').classList.remove('quake'); document.querySelectorAll('.crash').forEach(e => e.remove());
+  $('shapeList').innerHTML = '닫힌 모양에 따라 · <em>' + ['삼각형', '사각형', '오각형', '육각형', '별'].map(k => `${k} +${SHAPE_PTS[k]}`).join(' · ') + '</em>';
+  render();
+}
+function drawCards(goal) {
+  const first = shuffle(PRINCIPLES.filter(c => c.hue))[0];
+  return shuffle([first, ...shuffle(PRINCIPLES.filter(c => c !== first)).slice(0, goal - 1)]).map(c => c.id);
+}
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+// ───────── 계산 ─────────
+const inb = (x, y) => x >= 0 && y >= 0 && x < S.N && y < S.N;
+const at = (x, y) => inb(x, y) ? S.cells[y][x] : null;
+const DIR8 = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
+const dotsLeft = p => p.pieces[1] + p.pieces[2] + p.pieces[3];
+const cardOn = id => S.cards.find(c => c.id === id);
+
+function torque() {
+  let tx = 0, ty = 0;
+  for (let y = 0; y < S.N; y++) for (let x = 0; x < S.N; x++) {
+    const c = S.cells[y][x]; if (c) { tx += c.w * (x - S.R); ty += c.w * (y - S.R); }
+  }
+  return { tx, ty, risk: Math.hypot(tx, ty) / S.limit };
+}
+
+// 선분 기하
+const gcd = (a, b) => b ? gcd(b, a % b) : a;
+function between(a, b) {            // 선분 위(양 끝 제외)의 격자점
+  const dx = b[0] - a[0], dy = b[1] - a[1], g = gcd(Math.abs(dx), Math.abs(dy)), r = [];
+  for (let i = 1; i < g; i++) r.push([a[0] + dx / g * i, a[1] + dy / g * i]);
+  return r;
+}
+const orient = (a, b, c) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+const crosses = (a, b, c, d) => orient(a, b, c) * orient(a, b, d) < 0 && orient(c, d, a) * orient(c, d, b) < 0;
+const onAnyLine = (x, y) => S.lines.some(l => between(l.a, l.b).some(q => q[0] === x && q[1] === y));
+// 면의 안쪽인가 (감긴 횟수로 판정 — 별처럼 선이 겹친 면도 칠해진 곳 전체가 안쪽)
+function inAnyFace(x, y) {
+  return S.faces.some(f => {
+    let w = 0;
+    f.pts.forEach((a, i) => {
+      const b = f.pts[(i + 1) % f.pts.length], o = orient(a, b, [x, y]);
+      if (a[1] <= y) { if (b[1] > y && o > 0) w++; } else if (b[1] <= y && o < 0) w--;
+    });
+    return w !== 0;
+  });
+}
+const blocked = (x, y) => onAnyLine(x, y) || inAnyFace(x, y);   // 선 위와 면 안쪽에는 점을 놓을 수 없다
+const linked = (p, a, b) => { const s = S.adj[p].get(key(...a)); return !!s && s.has(key(...b)); };
+
+function canLine(p, a, b) {
+  const dx = Math.abs(a[0] - b[0]), dy = Math.abs(a[1] - b[1]);
+  if (!dx && !dy) return false;
+  if (Math.max(dx, dy) > MAX_LINE || linked(p, a, b)) return false;
+  if (between(a, b).some(q => S.cells[q[1]][q[0]])) return false;       // 다른 점을 지나감
+  return !S.lines.some(l => l.p !== p && crosses(a, b, l.a, l.b));      // 남의 선을 가로지름
+}
+
+// a에서 b까지 이미 그어진 내 선을 따라가는 가장 짧은 길 (없으면 null)
+function pathBetween(p, a, b) {
+  const start = key(...a), goal = key(...b), prev = new Map([[start, null]]), q = [start];
+  while (q.length) {
+    const k = q.shift();
+    if (k === goal) { const out = []; for (let c = k; c; c = prev.get(c)) out.push(unkey(c)); return out.reverse(); }
+    for (const n of S.adj[p].get(k) || []) if (!prev.has(n)) { prev.set(n, k); q.push(n); }
+  }
+  return null;
+}
+
+// 닫힌 고리의 모양 이름 (꼬여서 면이 안 되면 null)
+function shapeOf(cyc) {
+  const n = cyc.length, E = i => [cyc[i], cyc[(i + 1) % n]];
+  const cnt = Array(n).fill(0);
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    if (j === i + 1 || (i === 0 && j === n - 1)) continue;
+    if (crosses(...E(i), ...E(j))) { cnt[i]++; cnt[j]++; }
+  }
+  if (cnt.some(Boolean)) return n === 5 && cnt.every(c => c === 2) ? '별' : null;
+  const corners = cyc.filter((v, i) => orient(cyc[(i + n - 1) % n], v, cyc[(i + 1) % n]) !== 0).length;
+  return { 3: '삼각형', 4: '사각형', 5: '오각형', 6: '육각형' }[corners] || '다각형';
+}
+
+// 점을 놓아 얻는 점수
+function scoreDot(x, y, p, w, riskBefore, riskAfter) {
+  const g = [{ label: `점(${SIZE_NAME[w]}·${HUES[S.cells[y][x].h].name})`, pts: w }];
+  const mine = (a, b) => { const c = at(a, b); return c && c.p === p ? c : null; };
+  // 원리 인정: 그 구성을 이루는 점(dots)이 모두 '아직 다른 원리에 쓰지 않은 점'이어야 한다 (튜토리얼은 제한 없음)
+  const fresh = c => c && (S.tut || !c.u);
+  const hit = (id, dots) => { const c = cardOn(id); if (c && dots.every(fresh) && !g.some(e => e.card === c)) g.push({ label: c.name, pts: c.pts, card: c, dots }); };
+
+  // 강조: 내 대 점 바로 둘레에 내 소 점 4개
+  // 균형(대칭): 판 가운데를 사이에 두고 마주 보는 자리에 같은 크기의 내 점 — 2쌍
+  const pr = [];
+  for (let j = 0; j < S.N; j++) for (let i = 0; i < S.N; i++) {
+    const c = mine(i, j); if (!fresh(c)) continue;
+    for (let sw = 1; sw < c.w; sw++) {           // 강조: 가운데보다 작은, 같은 크기의 점 4개 (중+소4 · 대+소4 · 대+중4)
+      const sm = DIR8.map(([dx, dy]) => mine(i + dx, j + dy)).filter(s => s && s.w === sw && fresh(s));
+      if (sm.length >= 4) hit('emph', [c, ...sm.slice(0, 4)]);
+    }
+    const m = mine(S.N - 1 - i, S.N - 1 - j);
+    if (fresh(m) && c.w === m.w && j * S.N + i < (S.N - 1 - j) * S.N + (S.N - 1 - i)) pr.push(c, m);
+  }
+  if (pr.length >= 4) hit('balance', pr.slice(0, 4));
+  return g;
+}
+
+// ───────── 진행 ─────────
+// 판을 바꾸는 행동 4가지. 한 기기 모드에서는 바로 실행하고, 온라인 방에서는 같은 방 사람들에게도 보내 모두 같은 순서로 실행한다
+function applyAction(a) {
+  if (a.t === 'dot') { S.sel = a.w; S.hue = a.h; placeDot(a.x, a.y); }
+  else if (a.t === 'line') drawLine(a.a, a.b);
+  else if (a.t === 'erase') eraseDot(a.x, a.y);
+  else if (a.t === 'pass') { addLog(`<b>${S.players[S.cur].name}</b> 차례 넘김`); endTurn(); render(); }
+}
+const twoStep = () => matchMedia('(pointer: coarse)').matches || innerWidth < 700;   // 터치 기기이거나 좁은 화면
+function act(a) {
+  if (NET.on) { if (!netCanAct()) return netNotMyTurn(); netSendAct(a); }
+  applyAction(a);
+}
+
+function tap(x, y) {
+  if (S.locked || S.over || S.players[S.cur].ai) return;
+  if (NET.on && S.cur !== NET.seat) return netNotMyTurn();
+  const c = S.cells[y][x], me = S.cur, f = S.from;
+  if (S.erase) {                               // 지울 점 고르는 중: 대상이면 지우고, 아니면 취소
+    if (canErase(x, y)) return act({ t: 'erase', x, y });
+    S.erase = false; return render();
+  }
+  if (f) {
+    S.from = null;
+    if (c && c.p === me && !(f[0] === x && f[1] === y)) {
+      if (canLine(me, f, [x, y])) return act({ t: 'line', a: f, b: [x, y] });
+      S.from = [x, y];                       // 이을 수 없는 내 점이면 시작점을 바꾼다
+    }
+    return render();
+  }
+  if (c) { if (c.p === me) { S.ghost = null; S.from = [x, y]; render(); } return; }
+  // 놓을 수 없는 자리는 여기서 걸러서, 온라인 방에 헛된 행동을 보내지 않는다
+  if (!S.players[me].pieces[S.sel]) return showToast('놓을 점이 없습니다. 선을 긋거나 차례를 넘기세요.');
+  if (blocked(x, y)) return showToast('선 위와 면 안쪽에는 점을 놓을 수 없습니다.');
+  // 손가락으로 누르는 기기: 첫 번째는 미리보기, 같은 자리를 한 번 더 눌러야 놓인다 (잘못 누르는 일을 막는다)
+  if (twoStep() && !(S.ghost && S.ghost[0] === x && S.ghost[1] === y)) { S.ghost = [x, y]; return render(); }
+  S.ghost = null;
+  act({ t: 'dot', x, y, w: S.sel, h: S.hue });
+}
+
+// ── 지우기(공격): 원리를 완성할 때마다 1회 얻는다. 상대의 소 점 중 아직 원리에 쓰지 않은 것만 지울 수 있다
+const usableErasers = p => p.erasers - p.newErasers;   // 지금 쓸 수 있는 지우기 (이번 차례에 얻은 것은 제외)
+function canErase(x, y) {
+  const c = S.cells[y][x];
+  if (!c || c.p === S.cur || c.w !== 1 || c.u) return false;
+  const owner = S.players[c.p];
+  if (opt.hitCap && owner.hits >= opt.hitCap) return false;   // 한 사람이 한 판에 지워질 수 있는 횟수 제한
+  return !(opt.shield && owner.shield);                       // 보호 중인 사람의 점은 못 지운다
+}
+function eraseDot(x, y) {
+  const P = S.players[S.cur], c = S.cells[y][x], owner = S.players[c.p], k = key(x, y);
+  P.erasers--; S.erase = false;
+  S.cells[y][x] = null;
+  const t = torque();
+  if (t.risk > 1 && opt.mode === 'class') {    // 수업용: 지우면 판이 떨어지는 경우 → 감점하고 지우기는 취소
+    S.cells[y][x] = c; P.score -= FALL_PENALTY;
+    addLog(`<b>${P.name}</b> 지우다가 판을 떨어뜨림 · −${FALL_PENALTY}점`);
+    showToast(`<b>−${FALL_PENALTY}</b><span class="p">그 점을 지우면 균형이 무너집니다. 점은 그대로 둡니다.</span>`);
+    return render();
+  }
+  owner.pieces[1]++;                           // 지워진 점은 주인 손으로 돌아간다
+  owner.hits++; owner.shield = true;           // 지워진 사람은 자기 다음 차례가 올 때까지 보호된다
+  S.lines = S.lines.filter(l => key(...l.a) !== k && key(...l.b) !== k);
+  const adj = S.adj[c.p]; (adj.get(k) || []).forEach(n => adj.get(n).delete(k)); adj.delete(k);
+  S.faces = S.faces.filter(f => !f.pts.some(q => q[0] === x && q[1] === y));
+  addLog(`<b>${P.name}</b> 지우기 · ${owner.name}의 소 점`);
+  if (t.risk > 1) return fall(x, y, P, t);     // 지워서 판이 떨어지면 지운 사람 책임
+  showToast(`<b>지우기</b> ${owner.name}의 소 점을 없앴습니다`);
+  if (opt.erCost && --S.acts <= 0) endTurn();  // (시험용) 지우기가 행동 1번을 쓰는 규칙
+  render();
+  eraseFx(x, y, dotColor(c));
+}
+
+// 지우는 순간의 효과 (보여 주기만 한다): 지워진 자리에서 점이 흐려지고, 지우개가 문지르고, 가루가 흩어진다
+function eraseFx(x, y, color) {
+  if (NET.replay || typeof document === 'undefined') return;
+  const b = $('board'), d = b.offsetWidth * DOT_RATIO[1] / S.N, el = document.createElement('div');
+  el.className = 'erasefx'; el.style.left = (x + .5) / S.N * 100 + '%'; el.style.top = (y + .5) / S.N * 100 + '%';
+  el.innerHTML = `<u style="width:${d}px;height:${d}px;left:${-d / 2}px;top:${-d / 2}px;background:${color}"></u><b></b>`
+    + Array.from({ length: 12 }, (_, i) => { const a = i / 12 * 2 * Math.PI + Math.random() * .5, r = 24 + Math.random() * 34;
+        return `<i style="--dx:${(Math.cos(a) * r).toFixed(0)}px;--dy:${(Math.sin(a) * r).toFixed(0)}px;background:${i % 3 ? color : '#fff'}"></i>`; }).join('');
+  b.appendChild(el); setTimeout(() => el.remove(), 1000);
+}
+
+function placeDot(x, y) {
+  const P = S.players[S.cur], w = S.sel;
+  if (!P.pieces[w]) return showToast('놓을 점이 없습니다. 선을 긋거나 차례를 넘기세요.');
+  if (blocked(x, y)) return showToast('선 위와 면 안쪽에는 점을 놓을 수 없습니다.');
+  const before = torque().risk;
+  S.cells[y][x] = { p: S.cur, w, h: S.hue };
+  P.pieces[w]--;
+  S.last = [x, y];
+  const pushed = S.map.push && !S.pushed && S.round >= opt.pushFrom ? pushNeighbor(x, y) : null;     // 씨름판: 옆의 상대 소 점 하나를 밀어낸다
+  const t = torque();
+  if (t.risk > 1) return fall(x, y, P, t);
+  const gains = scoreDot(x, y, S.cur, w, before, t.risk);
+  if (pushed) gains.push({ label: `밀어내기(${pushed})`, pts: 0 });
+  finish(gains, { type: 'dot', w, h: S.hue, before, after: t.risk });
+}
+
+// 한 점에 이어진 선과, 그 선으로 닫혀 있던 면을 모두 없앤다 (점은 그대로 둔다)
+function detach(x, y) {
+  const c = S.cells[y][x], k = key(x, y), adj = S.adj[c.p];
+  S.lines = S.lines.filter(l => key(...l.a) !== k && key(...l.b) !== k);
+  (adj.get(k) || []).forEach(n => adj.get(n).delete(k)); adj.delete(k);
+  S.faces = S.faces.filter(f => !f.pts.some(q => q[0] === x && q[1] === y));
+}
+const hasLines = (x, y) => { const s = S.adj[S.cells[y][x].p].get(key(x, y)); return !!s && s.size > 0; };
+
+// ── 씨름판 「밀어내기」: 방금 놓은 점 (x,y) 바로 옆(여덟 방향)에 있는, 내 점보다 작은 상대 점 하나를 반대쪽으로 한 칸 민다.
+// 씨름처럼 무거운 쪽이 이긴다: 대는 중·소를, 중은 소를 밀고, 소는 아무것도 못 민다.
+// 한 차례에 한 번. 원리에 쓴 점은 밀리지 않고, 뒤가 막혀 있으면 밀 수 없다. 밀린 점의 선은 끊어지고, 판 밖으로 나가면 주인 손으로 돌아간다.
+function pushNeighbor(x, y) {
+  const mine = S.cells[y][x];
+  for (const [dx, dy] of DIR8) {
+    const tx = x + dx, ty = y + dy, c = at(tx, ty);
+    if (!c || c.p === S.cur || c.w >= mine.w || c.u) continue;
+    const nx = tx + dx, ny = ty + dy, inside = inb(nx, ny);
+    if (inside && (S.cells[ny][nx] || blocked(nx, ny))) continue;
+    detach(tx, ty); S.cells[ty][tx] = null;
+    if (inside) { S.cells[ny][nx] = c; S.blown = new Map([[key(nx, ny), [-dx, -dy]]]); }
+    else S.players[c.p].pieces[c.w]++;
+    S.pushed = true;
+    return `${S.players[c.p].name}의 ${SIZE_NAME[c.w]} 점` + (inside ? '' : ' · 판 밖으로');
+  }
+  return null;
+}
+
+// ── 폭풍 「돌풍」: 바퀴가 끝날 때 예보된 방향으로 분다. 선으로 묶이지 않았고 원리에 쓰지도 않은 점이 한 칸씩 밀린다.
+// 앞이 막힌 점은 그대로 있고, 돌풍 때문에 판이 무너질 것 같으면 바람이 잦아든다(아무도 밀리지 않는다).
+function blowGust() {
+  const [dx, dy, arrow] = S.gust, movers = [];
+  for (let y = 0; y < S.N; y++) for (let x = 0; x < S.N; x++) { const c = S.cells[y][x]; if (c && !c.u && !hasLines(x, y)) movers.push([x, y]); }
+  movers.sort((a, b) => (b[0] * dx + b[1] * dy) - (a[0] * dx + a[1] * dy));     // 바람이 가는 쪽 점부터 옮겨야 서로 막지 않는다
+  const moved = [];
+  for (const [x, y] of movers) {
+    const nx = x + dx, ny = y + dy;
+    if (!inb(nx, ny) || S.cells[ny][nx] || blocked(nx, ny)) continue;
+    S.cells[ny][nx] = S.cells[y][x]; S.cells[y][x] = null; moved.push([x, y, nx, ny]);
+  }
+  if (torque().risk > 1) {                       // 판이 무너질 만큼이면 되돌린다
+    for (const [x, y, nx, ny] of moved.reverse()) { S.cells[y][x] = S.cells[ny][nx]; S.cells[ny][nx] = null; }
+    addLog(`돌풍 ${arrow} · 판이 버티지 못할 만큼 거세서 잦아들었습니다`);
+  } else {
+    S.blown = new Map(moved.map(([, , nx, ny]) => [key(nx, ny), [-dx, -dy]]));
+    addLog(`돌풍 ${arrow} · 점 ${moved.length}개가 밀렸습니다`);
+    showToast(`<b>돌풍 ${arrow}</b> 묶이지 않은 점 ${moved.length}개가 밀렸습니다`);
+  }
+  S.gust = GUSTS[Math.floor(S.rand() * 4)];     // 다음 돌풍 방향을 정해 예보한다
+}
+
+function drawLine(a, b) {
+  const p = S.cur, g = [{ label: '선', pts: 1 }];
+  const path = pathBetween(p, a, b);          // 새 선을 넣기 전의 길 → 있으면 고리가 닫힌다
+  S.lines.push({ p, a, b });
+  for (const [u, v] of [[a, b], [b, a]]) { const k = key(...u); if (!S.adj[p].has(k)) S.adj[p].set(k, new Set()); S.adj[p].get(k).add(key(...v)); }
+  S.last = null;
+  let made = null;
+  const fresh = c => c && (S.tut || !c.u);     // 다른 원리에 쓰지 않은 점만 원리로 인정된다
+  const hit = (id, dots) => { const c = cardOn(id); if (c && dots.every(fresh) && !g.some(x => x.card === c)) g.push({ label: c.name, pts: c.pts, card: c, dots }); };
+  // 반복·점이: 같은 간격으로 한 줄에 놓인 내 점 3개가 선으로 이어졌는가 (방금 그은 선이 그 한쪽)
+  for (const [u, v] of [[a, b], [b, a]]) {
+    const t = [2 * v[0] - u[0], 2 * v[1] - u[1]], c = at(...t);
+    if (!c || c.p !== p || !linked(p, v, t)) continue;
+    const row = [u, v, t].map(q => S.cells[q[1]][q[0]]), ws = row.map(d => d.w).join('');
+    if (ws === '111' || ws === '222' || ws === '333') hit('repeat', row);
+    if (ws === '123' || ws === '321') hit('grad', row);
+  }
+  if (path) {
+    const shape = shapeOf(path);
+    if (shape) {
+      made = shape;
+      const dots = path.map(([x, y]) => S.cells[y][x]);
+      const ws = dots.map(d => d.w), hs = [...new Set(dots.map(d => d.h))];
+      S.faces.push({ p, pts: path, shape, fill: mixHues(dots.map(d => d.h)) });
+      g.push({ label: '면', pts: FACE_PTS }, { label: `형(${shape})`, pts: SHAPE_PTS[shape] });
+      if ([1, 2, 3].every(k => ws.includes(k))) hit('variety', dots);
+      if (ws.includes(3) && ws.includes(1) && !ws.includes(2)) hit('contrast', dots);   // 대와 소만으로 닫은 면
+      // 색: 한 가지 색 / 색상환에서 이웃한 3칸 안의 색들 / 보색 쌍 포함
+      if (hs.length === 1) hit('unity', dots);
+      else if ([0, 1, 2, 3, 4, 5].some(s => hs.every(h => (h - s + 6) % 6 <= 2))) hit('analog', dots);
+      if (hs.some(h => hs.includes((h + 3) % 6))) hit('comp', dots);
+    }
+  }
+  finish(g, { type: 'line', shape: made });
+}
+
+// 한 행동이 끝났을 때: 점수 반영 → 남은 행동 줄이기 → 필요하면 차례 넘김
+function finish(gains, ev) {
+  const P = S.players[S.cur];
+  // 원리는 한 행동에 하나만, 사람마다 한 번씩만 인정한다 (튜토리얼은 연습이라 제한 없음)
+  if (!S.tut) { let took = false; gains = gains.filter(g => !g.card || (!took && !P.done.has(g.card.id) && (took = true))); }
+  const sum = gains.reduce((a, g) => a + g.pts, 0);
+  P.score += sum;
+  const cards = gains.filter(g => g.card);
+  if (S.attack) {                                // 지우기를 얻는 방식 (opt.erPer)
+    const gain = opt.erPer === 'principle' ? cards.length                           // 원리를 완성할 때마다
+               : opt.erPer === 'first' ? (cards.length && P.done.size === 0 ? 1 : 0)   // 첫 원리를 완성했을 때만
+               : opt.erPer === 'face' ? (ev && ev.shape ? 1 : 0)                      // 면을 닫을 때마다
+               : 0;                                                                   // 'none', 'behind'는 여기서 얻지 않는다
+    P.erasers += gain; if (S.delay || opt.seatDelay.includes(S.oi)) P.newErasers += gain;
+  }
+  cards.forEach(g => { P.done.add(g.card.id); if (!S.tut) g.dots.forEach(d => d.u = g.card.id); });   // 쓴 점에 표시 → 다른 원리에 재사용 불가
+  addLog(`<b>${P.name}</b> +${sum} · ${gains.map(g => g.label + (g.card ? ' 완성' : '')).join(', ')}`);
+  showToast(`<b>+${sum}</b> ${gains.filter(g => !g.card).map(g => g.label).join(' · ')}` +
+    cards.map(g => `<span class="p">${g.card.name} 완성${S.tut ? '' : ` (${P.done.size}/${S.cards.length})`} — ${g.card.desc}</span>`).join(''));
+  const ids = cards.map(g => g.card.id);
+  if (P.done.size >= S.cards.length && !S.fullOrder.includes(S.cur)) S.fullOrder.push(S.cur);   // 모두 완성한 순서
+  if (S.tut) {                                   // 튜토리얼: 차례가 넘어가지 않고, 이번 단계를 해냈는지 본다
+    const st = TUT[S.tut.step];
+    if (!S.tut.ok && st.done && st.done({ ...ev, cards: ids })) S.tut.ok = true;
+  } else {
+    // 누군가 모두 완성하면 이번 바퀴가 마지막: 남은 사람도 한 차례씩 두고 끝난다
+    if (P.done.size >= S.cards.length && !S.final) {
+      S.final = true;
+      // 마지막으로 한 차례 더 둘 사람들: 'lap' = 나머지 모두 / 'round' = 이번 바퀴에서 아직 안 둔 사람
+      S.finalLeft = new Set(opt.finish === 'lap' ? S.players.map((_, i) => i).filter(i => i !== S.cur) : S.order.slice(S.oi + 1));
+      // 'plus1': 마지막 순서인 사람이 완성해서 아무도 응수할 수 없을 때만, 다음 사람(첫 순서)이 한 차례 더 둔다
+      // 'auto'(실제 게임): 3명 판에서만 이 덤 차례를 주고, 덤 차례는 행동 1번 (봇 600판: 26·32·42 → 36·33·32)
+      const bonus = opt.finish === 'plus1' || (opt.finish === 'auto' && S.players.length === 3);
+      if (bonus && S.finalLeft.size === 0) { S.finalLeft.add(S.order[0]); S.plusSeat = S.order[0]; }
+      addLog(`<b>${P.name}</b> 원리 ${S.cards.length}가지 완성 · ${opt.finish === 'lap' ? '나머지 사람이 한 차례씩 더 두면 끝납니다' : S.plusSeat != null ? `마지막 순서가 끝냈으므로 <b>${S.players[S.plusSeat].name}</b>이(가) 행동 1번을 더 하고 끝납니다` : '이번 바퀴가 마지막입니다'}`);
+    }
+    if (--S.acts <= 0) endTurn();
+  }
+  render(ids);
+}
+
+function endTurn() {
+  S.from = null; S.erase = false; S.ghost = null;
+  S.players[S.cur].newErasers = 0;             // 이번 차례에 얻은 지우기는 다음 차례부터 쓸 수 있다
+  const n = S.players.length;
+  if (S.final) S.finalLeft.delete(S.cur);
+  const lastDone = S.final && S.finalLeft.size === 0;     // 마지막 한 차례씩을 모두 마쳤다
+  let wrapped = false;                                     // 이번에 한 바퀴가 끝났는가
+  do {                                                     // 다음 차례 (마지막 차례 중에는 이미 둔 사람을 건너뛴다)
+    if (++S.oi >= n) {
+      S.round++; S.oi = 0; wrapped = true;
+      if (opt.rotate) S.start = (S.start + 1) % n;       // 바퀴마다 시작하는 사람이 한 칸씩 밀린다
+      S.order = Array.from({ length: n }, (_, i) => (S.start + i) % n);
+    }
+    S.cur = S.order[S.oi];
+  } while (!lastDone && S.final && !S.finalLeft.has(S.cur));
+  if (S.round > S.maxRounds || !S.players.some(dotsLeft) || lastDone) { S.over = true; const game = S; setTimeout(() => { if (S === game) showResult(null); }, 900); return; }
+  S.pushed = false;                              // 밀어내기는 차례마다 한 번
+  if (wrapped && S.map.gust) blowGust();         // 폭풍 맵: 바퀴가 끝날 때마다 돌풍
+  S.acts = opt.acts - (S.round === 1 ? (S.handicap[S.oi] || 0) : 0);   // 첫 바퀴에만 순서별로 행동을 덜 준다(선후공 보정)
+  if (S.final && S.plusSeat === S.cur) S.acts = opt.finish === 'auto' ? 1 : (opt.plusActs || opt.acts);   // 덤으로 받은 마지막 차례의 행동 수(시험용)
+  const NP = S.players[S.cur];
+  NP.shield = false;                           // 내 차례가 오면 보호가 풀린다
+  // (시험용) 뒤처진 사람에게 주는 방식: 차례가 왔을 때 완성한 원리가 가장 앞선 사람보다 적고 지우기가 없으면 1개
+  if (S.attack && opt.erPer === 'behind' && NP.erasers < 1 && NP.done.size < Math.max(...S.players.map(q => q.done.size))) NP.erasers++;
+  const pc = S.players[S.cur].pieces;
+  if (!pc[S.sel]) S.sel = [1, 2, 3].find(k => pc[k]) || 1;
+}
+
+// ── 와르르: 판이 무너지는 장면을 작은 물리 계산으로 그린다 (게임 결과에는 영향 없음, 보여 주기만 한다)
+// 판이 점점 빨리 기울고 → 점들이 비탈을 미끄러지며 서로 부딪히고 → 가장자리를 넘으면 아래로 떨어진다.
+// 선과 면은 이어진 점을 따라 끌려가다가, 점이 판 밖으로 떨어지면 끊어져 사라진다.
+function collapse(ux, uy, startDeg) {
+  const b = $('board'), N = S.N, game = S, svg = b.querySelector('svg');
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const els = [...b.querySelectorAll('.dot')], bodies = [];
+  for (let y = 0, k = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const c = S.cells[y][x]; if (!c) continue;
+    bodies.push({ k: key(x, y), x, y, vx: 0, vy: 0, m: c.w, r: DOT_RATIO[c.w] / 2 + .13, el: els[k++],
+                  mu: [0, .34, .24, .15][c.w] * (.75 + Math.random() * .5),   // 작은 점일수록 잘 안 미끄러진다
+                  air: false, z: 0, vz: 0, rot: 0, side: (Math.random() - .5) * 1.6 });
+  }
+  const by = new Map(bodies.map(o => [o.k, o]));
+  const lines = S.lines.map(l => ({ bs: S.players[l.p].bs, a: by.get(key(...l.a)), b: by.get(key(...l.b)), f: 1 }));
+  const faces = S.faces.map(f => ({ fill: f.fill, v: f.pts.map(q => by.get(key(...q))), f: 1 }));
+  svg.querySelectorAll('.mark').forEach(m => m.remove());
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g'); svg.appendChild(g);
+  b.style.transition = 'none';
+  bodies.forEach(o => { o.el.style.transition = 'none'; o.el.style.animation = 'none'; });
+
+  const G = 30, END = 3.3, rad = Math.PI / 180;
+  let last = performance.now(), t = 0;
+  function frame(now) {
+    if (S !== game) return;
+    const dt = Math.min(.033, (now - last) / 1000); last = now; t += dt;
+    // 판: 처음엔 천천히, 갈수록 빨리 기운다. 끝에는 판 자체도 받침에서 미끄러져 떨어진다
+    const p = Math.min(1, t / 1.1), deg = startDeg + (64 - startDeg) * p * p, drop = Math.max(0, t - 1.7);
+    b.style.transform = `translate3d(${ux * drop * drop * 420}px, ${uy * drop * drop * 420}px, ${-drop * drop * 900}px) rotateX(${-uy * deg}deg) rotateY(${ux * deg}deg)`;
+    b.style.opacity = Math.max(0, 1 - drop * 1.1);
+    const sin = Math.sin(deg * rad), cos = Math.cos(deg * rad);
+    for (const o of bodies) {
+      if (o.air) {                                  // 판 밖: 가던 방향 그대로 날아가며 아래로 떨어진다
+        o.vz -= 3400 * dt; o.z += o.vz * dt;
+      } else {
+        const sp = Math.hypot(o.vx, o.vy);
+        let a = G * (sin - o.mu * cos);             // 비탈을 따라 내려가는 힘에서 마찰을 뺀다
+        if (a < 0 && sp < .05) a = 0;               // 아직 마찰이 이기면 버틴다
+        o.vx += (ux * a - uy * o.side * sin) * dt; o.vy += (uy * a + ux * o.side * sin) * dt;
+        if (o.x < -.5 || o.y < -.5 || o.x > N - .5 || o.y > N - .5) { o.air = true; o.vz = -120; }
+      }
+      o.x += o.vx * dt; o.y += o.vy * dt;
+      o.rot += (o.vx * ux + o.vy * uy) * dt / o.r * 42;      // 굴러가는 만큼 돈다
+    }
+    for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) {   // 점끼리 부딪히면 밀어낸다
+      const A = bodies[i], B = bodies[j]; if (A.air || B.air) continue;
+      const dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy), min = A.r + B.r;
+      if (d >= min || d < 1e-6) continue;
+      const nx = dx / d, ny = dy / d, over = min - d, tm = A.m + B.m;
+      A.x -= nx * over * B.m / tm; A.y -= ny * over * B.m / tm; B.x += nx * over * A.m / tm; B.y += ny * over * A.m / tm;
+      const vr = (B.vx - A.vx) * nx + (B.vy - A.vy) * ny;
+      if (vr < 0) { const jv = -1.35 * vr / (1 / A.m + 1 / B.m); A.vx -= jv / A.m * nx; A.vy -= jv / A.m * ny; B.vx += jv / B.m * nx; B.vy += jv / B.m * ny; }
+    }
+    if (!still) {
+      for (const o of bodies) {
+        o.el.style.left = (o.x + .5) / N * 100 + '%'; o.el.style.top = (o.y + .5) / N * 100 + '%';
+        o.el.style.transform = `translate(-50%, -50%) translateZ(${2 + o.z}px) rotate(${o.rot}deg)`;
+        o.el.style.opacity = o.z < -700 ? Math.max(0, 1 + (o.z + 700) / 500) : 1;
+      }
+      let s = '';
+      for (const f of faces) { if (f.v.some(o => o.air)) f.f -= dt * 5; if (f.f > 0) s += `<polygon points="${f.v.map(o => o.x.toFixed(2) + ',' + o.y.toFixed(2)).join(' ')}" fill="${f.fill}" opacity="${(.5 * f.f).toFixed(2)}"/>`; }
+      for (const l of lines) {
+        if (l.a.air || l.b.air) l.f -= dt * 3.5;
+        if (l.f > 0 && Math.hypot(l.a.x - l.b.x, l.a.y - l.b.y) > .1) s += `<g opacity="${l.f.toFixed(2)}">${lineSvg(l.bs, [l.a.x, l.a.y], [l.b.x, l.b.y], LIT, false)}</g>`;
+      }
+      g.innerHTML = s;
+    }
+    if (t < END) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+function fall(x, y, P, t) {
+  S.locked = true;
+  if (opt.mode === 'class' || S.tut) {
+    if (S.tut) {
+      P.pieces[S.cells[y][x].w]++;
+      render(); $('board').classList.add('danger');
+      showToast('<b>판이 떨어졌어요!</b><span class="p">실제 게임이라면 여기서 패배입니다. 방금 놓은 점을 치우고 계속합니다.</span>');
+    } else {
+      P.score -= FALL_PENALTY;
+      addLog(`<b>${P.name}</b> 판을 떨어뜨림 · −${FALL_PENALTY}점, 놓은 점은 사라집니다`);
+      render(); $('board').classList.add('danger');
+      showToast(`<b>−${FALL_PENALTY}</b><span class="p">균형이 무너졌습니다. 방금 놓은 점을 치우고 계속합니다.</span>`);
+    }
+    const game = S;
+    setTimeout(() => {
+      if (S !== game) return;
+      S.cells[y][x] = null; S.last = null; S.locked = false;
+      $('board').classList.remove('danger');
+      if (!S.tut && --S.acts <= 0) endTurn();
+      render();
+    }, 1500);
+    return;
+  }
+  P.fallen = true; S.over = true;
+  addLog(`<b>${P.name}</b> 판을 떨어뜨렸습니다`);
+  render();
+  const b = $('board'), len = Math.hypot(t.tx, t.ty), ux = t.tx / len, uy = t.ty / len;
+  const game = S;
+  requestAnimationFrame(() => {
+    if (S !== game) return;
+    b.classList.add('danger');
+    $('scene').classList.add('quake');
+    collapse(ux, uy, Math.min(t.risk, 1.25) * MAX_ANGLE);
+    const big = document.createElement('div'); big.className = 'crash'; big.textContent = '와르르!';
+    setTimeout(() => { if (S === game) { $('scene').appendChild(big); setTimeout(() => big.remove(), 2600); } }, 450);
+  });
+  setTimeout(() => { if (S === game) showResult(P); }, 3600);
+}
+
+function showResult(faller) {
+  // 순위: 떨어뜨린 사람이 맨 뒤 → 완성한 원리가 많은 순 → 점수 순
+  // 공격 규칙을 켠 판에서는 점수까지 같으면 '모두 완성'을 먼저 한 사람이 앞선다 (끈 판은 공동 우승)
+  const firstAt = p => { const k = S.fullOrder.indexOf(S.players.indexOf(p)); return k < 0 ? 99 : k; };
+  const base = (a, b) => (a.fallen - b.fallen) || (b.done.size - a.done.size) || (b.score - a.score);
+  const cmp = (a, b) => base(a, b) || (S.attack ? firstAt(a) - firstAt(b) : 0);
+  const rank = S.players.slice().sort(cmp);
+  const winners = rank.filter(p => !p.fallen && cmp(p, rank[0]) === 0);
+  const full = S.players.filter(p => !p.fallen && p.done.size >= S.cards.length);
+  $('resTitle').textContent = winners.map(p => p.name).join(' · ') + (winners.length > 1 ? ' 공동 승리' : ' 승리');
+  $('resSub').textContent = faller
+    ? `${faller.name}이(가) 판을 떨어뜨렸습니다. 나머지는 완성한 원리 수, 그다음 점수로 순위를 정합니다.`
+    : full.length === 1 ? `${full[0].name}만 조형 원리 ${S.cards.length}가지를 모두 완성했습니다.`
+    : full.length > 1 && winners.length === 1 && base(rank[0], rank[1]) === 0 ? `점수까지 같아서, ${S.cards.length}가지를 먼저 완성한 ${rank[0].name}이(가) 우승입니다.`
+    : full.length > 1 ? `${full.length}명이 같은 바퀴에 ${S.cards.length}가지를 모두 완성해서 점수로 가렸습니다.`
+    : `아무도 ${S.cards.length}가지를 다 완성하지 못했습니다. 완성한 원리 수, 그다음 점수로 순위를 정합니다.`;
+  $('resRank').innerHTML = rank.map((p, i) =>
+    `<div class="score ${p.fallen ? 'outp' : ''}"><span class="chip">${ringSvg(p.bs, LIT)}</span>
+     <span class="name">${p.fallen ? i + 1 : 1 + rank.filter(q => cmp(q, p) < 0).length}위 ${p.name}${p.fallen ? ' (떨어뜨림)' : ''}</span>
+     <span class="left">원리 ${p.done.size}/${S.cards.length}</span><span class="pts">${p.score}</span></div>`).join('');
+  // 온라인 방에서는 방장만 다시 시작할 수 있다
+  $('btnAgain').hidden = NET.on && !NET.host;
+  if (NET.on && !NET.host) $('resSub').textContent += ' 방장이 다시 시작하면 함께 시작됩니다.';
+  $('result').hidden = false;
+}
+
+// ───────── 화면 ─────────
+function render(hitCards = []) {
+  const { N, R } = S, P = S.players[S.cur], t = torque(), f = S.from;
+  document.documentElement.style.setProperty('--cur', LIT);
+
+  $('turn').innerHTML = S.over ? '<small>판이 끝났습니다</small>'
+    : S.tut ? `<span class="chip">${ringSvg(P.bs, LIT)}</span>연습 중 <small>차례 제한 없이 자유롭게 놓아 볼 수 있습니다</small>`
+    : `<span class="chip">${ringSvg(P.bs, LIT)}</span>${P.name} 차례 ${NET.on && S.cur === NET.seat ? '<em class="mine">내 차례</em>' : ''}${S.final ? '<em class="final">마지막 바퀴</em>' : ''}<small>남은 행동${S.round === 1 && S.handicap[S.oi] ? ` (마지막 순서라 첫 차례만 ${opt.acts - S.handicap[S.oi]}번)` : ''}</small>
+       <span class="pips">${Array.from({ length: opt.acts }, (_, i) => `<i class="${i < S.acts ? 'on' : ''}"></i>`).join('')}</span>`;
+  // 판 위 띠 왼쪽: 이 맵의 효과와 지금 상태 (돌풍 예보, 밀어내기 사용 여부)
+  $('mapInfo').innerHTML = S.map.id === 'none' ? '' :
+    S.map.gust ? `${S.map.name} · 다음 돌풍 <b style="font-size:17px">${S.gust[2]}</b><small>바퀴가 끝나면 붑니다. 선으로 이은 점과 원리에 쓴 점은 버팁니다</small>`
+    : S.map.push ? `${S.map.name} · 밀어내기 ${S.pushed ? '이번 차례에 사용함' : '가능'}<small>내 점보다 작은 상대 점 바로 옆에 놓으면 한 칸 밀어냅니다 (대 → 중·소, 중 → 소)</small>`
+    : `${S.map.name}<small>${S.map.rule}</small>`;
+  $('netInfo').textContent = NET.on ? `방 ${NET.code}${NET.seat >= 0 ? ' · 나는 ' + S.players[NET.seat].name : ' · 관전 중'}` : '';
+  $('hint').textContent = S.over ? '' : P.ai ? `${P.name}가 두는 중입니다…` : NET.on && S.cur !== NET.seat ? `${P.name}의 차례입니다. 잠시 기다려 주세요.` : S.erase ? '빨간 점선으로 표시된 상대의 소 점을 누르면 지워집니다. 다른 곳을 누르면 취소됩니다.'
+    : S.ghost ? '같은 자리를 한 번 더 누르면 놓입니다. 다른 자리를 누르면 옮겨집니다.' : f ? '점선으로 표시된 내 점을 누르면 선이 그어집니다. 다른 곳을 누르면 취소됩니다.'
+    : twoStep() ? '빈 자리를 두 번 누르면 점 놓기 · 내 점 두 개를 누르면 선 긋기' : '빈 자리를 누르면 점 놓기, 내 점 두 개를 차례로 누르면 선 긋기';
+  $('round').textContent = S.tut ? '' : `${Math.min(S.round, S.maxRounds)} / ${S.maxRounds} 바퀴`;
+
+  // 판: 격자·면·선은 SVG, 점과 누르는 자리는 HTML
+  const pos = v => (v + .5) / N * 100;
+  let svg = `<svg viewBox="-0.5 -0.5 ${N} ${N}">`;
+  // 바둑판 줄 대신, 놓을 수 있는 자리마다 흐린 점만 찍는다 (맨 판처럼 보이되 간격은 가늠할 수 있게)
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) svg += `<circle cx="${i}" cy="${j}" r=".045" style="fill:var(--spot)"/>`;
+  for (const fc of S.faces) svg += `<polygon class="mark" points="${fc.pts.map(q => q.join(',')).join(' ')}" fill="${fc.fill}" opacity=".5"/>`;
+  // 선: 넓고 흐린 선(빛 번짐) 위에 가는 선을 겹쳐 빛나 보이게 한다
+  const lit = p => S.over || p === S.cur;      // 차례인 사람 것만 밝게 (판이 끝나면 모두 밝게)
+  for (const l of S.lines) if (!lit(l.p)) svg += lineSvg(S.players[l.p].bs, l.a, l.b, DIM, false);
+  for (const l of S.lines) if (lit(l.p)) svg += lineSvg(S.players[l.p].bs, l.a, l.b, LIT, true);
+  svg += `<circle class="center" cx="${R}" cy="${R}" r=".18" fill="none" stroke="#8d877a" stroke-width=".04"/></svg>`;
+
+  let html = svg;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const c = S.cells[y][x];
+    if (c) {
+      const d = DOT_RATIO[c.w] / N * 100, isNew = S.last && S.last[0] === x && S.last[1] === y;
+      // 돌풍·밀어내기로 방금 움직인 점은 원래 자리에서 미끄러져 오는 것처럼 보이게 한다 (--bx, --by: 점 너비 기준으로 한 칸)
+      const bl = S.blown && S.blown.get(key(x, y)), slide = bl ? `;--bx:${(bl[0] * 100 / DOT_RATIO[c.w]).toFixed(0)}%;--by:${(bl[1] * 100 / DOT_RATIO[c.w]).toFixed(0)}%` : '';
+      html += `<div class="dot ${isNew ? 'new' : ''} ${bl ? 'blown' : ''} ${c.u ? 'used' : ''}" style="left:${pos(x)}%;top:${pos(y)}%;width:${d}%;height:${d}%;--c:${dotColor(c)}${slide}">${ringSvg(S.players[c.p].bs, lit(c.p) ? LIT : DIM)}</div>`;
+    }
+    if (S.over) continue;
+    let cls = '';
+    if (S.erase) cls = canErase(x, y) ? 'atk' : '';
+    else if (!c) cls = f ? '' : blocked(x, y) ? 'no' : S.ghost && S.ghost[0] === x && S.ghost[1] === y ? 'ghost' : 'empty';
+    else if (f && f[0] === x && f[1] === y) cls = 'sel';
+    else if (f && c.p === S.cur && canLine(S.cur, f, [x, y])) cls = 'tgt';
+    html += `<button class="pt ${cls}" data-x="${x}" data-y="${y}" style="left:${pos(x)}%;top:${pos(y)}%" aria-label="${x + 1}열 ${y + 1}행"></button>`;
+  }
+  S.last = null; S.blown = null;
+  const b = $('board');
+  b.style.setProperty('--n', N);
+  b.style.setProperty('--ghost', DOT_RATIO[S.sel] * 100 + '%');
+  b.style.setProperty('--ghostc', HUES[S.hue].tones[S.sel]);
+  b.innerHTML = html + '<div class="cliff"></div>';     // 판의 옆면(섬 테마에서만 보인다)
+  const k = Math.min(t.risk, 1.25) * MAX_ANGLE / S.limit / Math.max(t.risk, .0001);
+  b.style.transform = `rotateX(${-t.ty * k}deg) rotateY(${t.tx * k}deg)`;
+
+  // 점 고르기 + 차례 넘기기
+  $('picker').innerHTML = [1, 2, 3].map(w => {
+    const px = 12 + w * 8;
+    return `<button class="size ${S.sel === w ? 'on' : ''}" data-w="${w}" ${P.pieces[w] && !S.over ? '' : 'disabled'}>
+      <i style="width:${px}px;height:${px}px;background:${HUES[S.hue].tones[w]}"></i><span>${SIZE_NAME[w]} <small>무게 ${w} · ${P.pieces[w]}개</small></span></button>`;
+  }).join('') + `<div class="side">`
+    + `<button class="btn" id="btnPass" ${S.over || S.tut || (NET.on && !netCanAct()) ? 'disabled' : ''}>${NET.on && S.cur !== NET.seat && netCanAct() ? '대신 넘기기' : '차례 넘기기'}</button></div>`;
+  // 지우기 버튼: 판 바로 위에, 쓸 수 있을 때만 나타난다 (내 차례이고 지우기가 있을 때)
+  const canErase1 = S.attack && !S.over && !P.ai && usableErasers(P) > 0 && (!NET.on || S.cur === NET.seat);
+  const eb = $('btnErase');
+  eb.hidden = !canErase1; eb.classList.toggle('on', !!S.erase);
+  if (canErase1) eb.innerHTML = `<i></i><span>지우기 ×${usableErasers(P)}<small>${S.erase ? '지울 점을 누르세요 (다시 누르면 취소)' : '지금 쓸 수 있어요 · 상대의 소 점 1개'}</small></span>`;
+  $('hues').innerHTML = HUES.map((h, i) =>
+    `<button class="hue ${S.hue === i ? 'on' : ''}" data-h="${i}" aria-label="${h.name}" ${S.over ? 'disabled' : ''}><i style="background:${h.tones[2]}"></i><span>${h.name}</span></button>`).join('');
+
+  // 기울기
+  const pct = Math.round(t.risk * 100);
+  $('riskTxt').textContent = pct + '%';
+  $('riskBar').style.width = Math.min(pct, 100) + '%';
+  $('riskBar').style.background = pct >= 75 ? 'var(--danger)' : pct >= 45 ? '#dd9a00' : 'var(--ok)';
+
+  // 점수판
+  $('scores').innerHTML = S.players.map((p, i) =>
+    `<div class="score ${i === S.cur && !S.over ? 'now' : ''} ${p.fallen ? 'outp' : ''}"><span class="chip">${ringSvg(p.bs, LIT)}</span>
+     <span class="name">${p.name}</span><span class="got" title="완성한 원리">${S.cards.map(c => `<i class="${p.done.has(c.id) ? 'on' : ''}"></i>`).join('')}</span>
+     <span class="left">남은 점 ${dotsLeft(p)}${S.attack && p.erasers ? ` · 지우기 ${p.erasers}` : ''}${p.shield ? ' · 보호 중' : ''}</span><span class="pts">${p.score}</span></div>`).join('');
+
+  // 원리 카드
+  $('cards').innerHTML = S.cards.map(c => cardHtml(c, hitCards.includes(c.id))).join('');
+  $('badges').innerHTML = S.cards.map(c =>
+    `<button class="badge ${hitCards.includes(c.id) ? 'hit' : ''} ${P.done.has(c.id) && !S.tut ? 'done' : ''}" title="${c.how}">${illus(c.id)}<span>${c.name}<small>${P.done.has(c.id) && !S.tut ? '✓ 완성' : '아직'}</small></span></button>`).join('');
+  renderTut();
+  aiSchedule();
+}
+
+// ── 컴퓨터 상대: 자기 차례가 되면 조금 뜸을 들인 뒤 한 수씩 둔다 (수를 고르는 머리는 sim.js의 봇)
+const AI_NOISE = { easy: .5, mid: .22, hard: 0 };     // 서툰 수(아무 데나 놓기)를 둘 확률
+let aiTimer = null;
+function aiSchedule() {
+  if (aiTimer || !S || S.over || S.locked || S.tut || NET.on || !S.players[S.cur].ai) return;
+  if (typeof botChoose !== 'function' || !$('intro').hidden || !$('title').hidden) return;
+  const game = S;
+  aiTimer = setTimeout(() => {
+    aiTimer = null;
+    if (S !== game || S.over || S.locked || !S.players[S.cur].ai) return aiSchedule();
+    const p = S.cur, P = S.players[p], sig = () => S.lines.length + ':' + dotsLeft(P) + ':' + S.cur + ':' + P.erasers;
+    const before = sig(), a = botChoose(p, AI_NOISE[opt.level]);
+    if (S.over) return;
+    if (a && a.type === 'dot') applyAction({ t: 'dot', x: a.x, y: a.y, w: a.w, h: a.h });
+    else if (a && a.type === 'line' && canLine(p, a.a, a.b)) applyAction({ t: 'line', a: a.a, b: a.b });
+    else if (!a) applyAction({ t: 'pass' });
+    if (!S.over && sig() === before) applyAction({ t: 'pass' });    // 둘 수가 없거나 수가 먹히지 않았으면 차례를 넘긴다
+    else render();
+  }, 950);
+}
+
+// 원리 카드 한 장: 예시 그림 + 이름·점수 + 설명 + 조건
+const cardHtml = (c, hit) =>
+  `<div class="princ ${hit ? 'hit' : ''}"><div class="pic">${illus(c.id)}</div>
+   <div><h3>${c.name}<span>+${c.pts}</span></h3><p>${c.desc}</p><p class="how">→ ${c.how}</p></div></div>`;
+
+function showIntro() {
+  $('introStart').innerHTML = S.round === 1 && S.oi === 0
+    ? `이번 판은 <b style="color:var(--ink)">${S.players[S.start].name}</b>부터 시작합니다. 순서: ${S.order.map(i => S.players[i].name).join(' → ')}` : '';
+  $('introCards').innerHTML = S.cards.map(c => cardHtml(c, false)).join('');
+  $('intro').hidden = false;
+}
+
+function renderTut() {
+  const box = $('tut');
+  box.hidden = !S.tut;
+  if (!S.tut) return;
+  const i = S.tut.step, st = TUT[i], ok = S.tut.ok || st.info;
+  box.innerHTML =
+    `<div class="tut-head"><span>튜토리얼 ${i + 1} / ${TUT.length}</span><button class="link" id="tutQuit">튜토리얼 끝내기</button></div>
+     <div class="tut-body">${st.illus ? `<div class="pic">${illus(st.illus)}</div>` : ''}
+       <div><h3>${st.t}${S.tut.ok ? '<em>✓ 잘했어요!</em>' : ''}</h3><p>${st.b}</p></div></div>
+     <button class="btn ${ok ? 'primary' : ''}" id="tutNext">${st.last ? '게임 시작하기' : ok ? '다음' : '이 단계 건너뛰기'}</button>`;
+}
+function leaveTutorial() { newGame(); useMenuLook(); $('setup').hidden = false; }
+
+function addLog(html) { $('log').insertAdjacentHTML('afterbegin', `<div>${html}</div>`); }
+function showToast(html) {
+  if (NET.replay) return;                      // 온라인 방에 다시 들어와 지난 수를 한꺼번에 되감는 중에는 알림을 띄우지 않는다
+  document.querySelectorAll('.toast').forEach(e => e.remove());
+  const el = document.createElement('div'); el.className = 'toast'; el.innerHTML = html;
+  $('scene').appendChild(el); setTimeout(() => el.remove(), 2500);
+}
+
+// ───────── 입력 ─────────
+$('board').addEventListener('click', e => { const b = e.target.closest('.pt'); if (b) tap(+b.dataset.x, +b.dataset.y); });
+$('picker').addEventListener('click', e => {
+  if (S.locked || S.over || S.players[S.cur].ai) return;
+  if (e.target.closest('#btnPass')) { if (!e.target.closest('#btnPass').disabled) act({ t: 'pass' }); return; }
+  if (NET.on && S.cur !== NET.seat) return netNotMyTurn();
+  if (e.target.closest('#btnErase')) { if (usableErasers(S.players[S.cur]) > 0) { S.erase = !S.erase; S.from = null; render(); } return; }
+  const b = e.target.closest('.size'); if (b && !b.disabled) { S.sel = +b.dataset.w; S.from = null; render(); }   // 미리보기(ghost)는 남겨서 크기만 바꿔 볼 수 있게 한다
+});
+$('btnErase').addEventListener('click', () => {    // 판 위의 지우기 버튼: 누르면 지울 점 고르기, 다시 누르면 취소
+  if (S.locked || S.over || S.players[S.cur].ai || (NET.on && S.cur !== NET.seat)) return;
+  if (usableErasers(S.players[S.cur]) > 0) { S.erase = !S.erase; S.from = null; S.ghost = null; render(); }
+});
+$('hues').addEventListener('click', e => {
+  if (NET.on && S.cur !== NET.seat) return netNotMyTurn();
+  const b = e.target.closest('.hue'); if (b && !S.locked && !S.over && !S.players[S.cur].ai) { S.hue = +b.dataset.h; S.from = null; render(); }
+});
+document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  opt[seg.dataset.key] = isNaN(+b.dataset.v) ? b.dataset.v : +b.dataset.v;
+}));
+$('btnStart').onclick = () => { $('setup').hidden = true; newGame(); useMapLook(); showIntro(); };
+$('btnTut').onclick = () => { $('setup').hidden = true; newGame(true); };
+// 지금 판이 진행 중인가 (점이 하나라도 놓였거나 온라인 방에 들어가 있고, 아직 끝나지 않았다)
+const inPlay = () => !S.over && (NET.on || S.round > 1 || S.cells.some(r => r.some(Boolean)) || (S.tut && S.tut.step > 0));
+// 진행 중인 판을 떠나려 할 때 한 번 물어보고, '나가기'를 고르면 then()을 실행한다.
+// (브라우저 기본 확인 창은 환경에 따라 뜨지 않을 수 있어서, 게임 안에 직접 그린 창을 쓴다)
+let leaveThen = null;
+function askLeave(then) {
+  if (!inPlay()) return then();
+  $('askMsg').textContent = NET.on ? '지금 나가면 방에서도 나가게 됩니다.' : S.tut ? '튜토리얼을 여기서 그만둡니다.' : '진행 중인 판이 사라집니다.';
+  leaveThen = then; $('ask').hidden = false;
+}
+$('btnAskNo').onclick = () => { $('ask').hidden = true; leaveThen = null; };
+$('btnAskYes').onclick = () => { $('ask').hidden = true; const f = leaveThen; leaveThen = null; if (f) f(); };
+const closeAll = () => ['mode', 'setup', 'lobby', 'intro', 'result', 'rules', 'themes', 'ask'].forEach(id => $(id).hidden = true);
+$('btnHome').onclick = () => askLeave(() => {    // 처음 화면으로
+  if (NET.on) netLeave();
+  closeAll(); newGame(); useMenuLook(); $('title').hidden = false;
+});
+$('btnNew').onclick = $('btnSetup').onclick = () => askLeave(() => {
+  closeAll();
+  if (NET.on) { netLeave(); newGame(); useMenuLook(); $('mode').hidden = false; return; }   // 온라인 방에서는 방을 나가 방식 고르기로
+  newGame(); useMenuLook(); $('setup').hidden = false;
+});
+$('btnModeHome').onclick = () => { $('mode').hidden = true; $('title').hidden = false; };
+$('btnAgain').onclick = () => {
+  if (NET.on) { if (NET.host) netStart(); return; }   // 온라인 방은 방장이 다시 시작한다
+  nextStart = (S.start + 1) % S.players.length; newGame(); useMapLook(); showIntro();   // 다음 판은 한 자리 밀어서 시작
+};
+$('btnBackMode').onclick = () => { $('setup').hidden = true; $('mode').hidden = false; };
+$('btnIntro').onclick = showIntro;
+$('badges').addEventListener('click', e => { if (e.target.closest('.badge')) showIntro(); });
+$('btnIntroClose').onclick = () => { $('intro').hidden = true; aiSchedule(); };   // 안내를 닫아야 컴퓨터가 두기 시작한다
+$('tut').addEventListener('click', e => {
+  if (!S.tut || S.locked) return;
+  if (e.target.closest('#tutQuit')) return leaveTutorial();
+  if (!e.target.closest('#tutNext')) return;
+  if (TUT[S.tut.step].last) return leaveTutorial();
+  S.tut.step++; S.tut.ok = false; S.from = null;
+  render();
+});
+$('btnRules').onclick = () => $('rules').hidden = false;
+$('btnRulesClose').onclick = () => $('rules').hidden = true;
+
+// ───────── 온라인 방 ─────────
+// 방식: 같은 방 번호의 사람들이 Supabase 실시간 채널 하나에 모인다. 방장이 판(카드·순서·자리)을 정해 보내고,
+// 그 뒤로는 차례인 사람이 자기 행동만 보낸다. 모두가 같은 행동을 같은 순서로 실행하므로 판이 똑같이 유지된다.
+// 늦게 들어오거나 수를 놓친 기기는 '처음 판 + 지금까지의 행동 목록'을 받아 한꺼번에 되감는다.
+const SUPA_URL = 'https://tizvsfquglhefuhqjzdp.supabase.co';          // 가상미술관과 같은 Supabase 프로젝트
+const SUPA_KEY = 'sb_publishable_0adsPL0-oozb4GWTbGfHCw_taSuQ9wy';    // 브라우저에 넣어도 되는 공개 키
+const SUPA_LIB = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
+const cleanName = s => String(s || '').replace(/[<>&"'`]/g, '').trim().slice(0, 8);
+const newCode = () => String(1000 + Math.floor(Math.random() * 9000));
+function netId() {                               // 이 기기(탭)의 표식. 새로 고침해도 같은 자리로 돌아오게 탭에 기억해 둔다
+  try { let v = sessionStorage.getItem('waruru-id'); if (!v) { v = Math.random().toString(36).slice(2, 10); sessionStorage.setItem('waruru-id', v); } return v; }
+  catch (e) { return NET.id || Math.random().toString(36).slice(2, 10); }
+}
+const netOnline = seat => !NET.init || NET.peers.some(p => p.id === NET.init.seats[seat]);
+const netCanAct = () => S.cur === NET.seat || (NET.host && !netOnline(S.cur));   // 방장은 나간 사람의 차례를 대신 넘길 수 있다
+function netNotMyTurn() { showToast(`지금은 <b>${S.players[S.cur].name}</b> 차례입니다`); }
+function netSend(m) { if (NET.ch) NET.ch.send({ type: 'broadcast', event: 'm', payload: { ...m, from: NET.id } }); }
+function netSendAct(a) { netSend({ t: 'act', gid: NET.init.gid, seq: NET.log.length, a }); NET.log.push(a); }
+function lobbyNote(text, warn) { $('lobbyNote').textContent = text; $('lobbyNote').className = 'note' + (warn ? ' warn' : ''); }
+
+async function netOpen(code, host) {
+  $('mode').hidden = true; $('lobby').hidden = false; $('roomCode').textContent = code; $('peerList').innerHTML = '';
+  lobbyNote('연결하는 중…');
+  try { if (!NET.sb) { const { createClient } = await import(SUPA_LIB); NET.sb = createClient(SUPA_URL, SUPA_KEY); } }
+  catch (e) { return lobbyNote('연결에 필요한 파일을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.', true); }
+  Object.assign(NET, { on: true, code, host, id: netId(), name: cleanName($('nick').value), at: Date.now(), seat: -1, peers: [], init: null, log: [] });
+  const ch = NET.ch = NET.sb.channel('waruru-' + code, { config: { broadcast: { self: false }, presence: { key: NET.id } } });
+  ch.on('broadcast', { event: 'm' }, ({ payload }) => netRecv(payload))
+    .on('presence', { event: 'sync' }, netPresence)
+    .subscribe(async st => {
+      if (NET.ch !== ch) return;
+      if (st === 'SUBSCRIBED') {
+        await ch.track({ id: NET.id, name: NET.name, at: NET.at, host });
+        netSend({ t: 'hello' });                 // 이미 진행 중인 판이 있으면 받아 온다
+        lobbyNote(host ? '친구들에게 방 번호를 알려 주세요. 2~4명이 모이면 시작할 수 있습니다.' : '방장이 시작하기를 기다리는 중입니다.');
+        if (!host) setTimeout(() => { if (NET.ch === ch && !NET.init && !NET.peers.some(p => p.host)) lobbyNote('이 번호의 방에 방장이 없습니다. 번호를 다시 확인해 주세요.', true); }, 3500);
+      } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') lobbyNote('연결이 끊겼습니다. 다시 연결하는 중…', true);
+    });
+}
+function netPresence() {
+  NET.peers = Object.values(NET.ch.presenceState()).map(a => a[0]).filter(Boolean)
+    .map(p => ({ ...p, name: cleanName(p.name) })).sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1));
+  // 같은 번호로 먼저 방을 만든 사람이 있으면 내 방 번호를 새로 뽑는다
+  if (NET.host && !NET.init && NET.peers.some(p => p.host && p.id !== NET.id && p.at < NET.at)) { netLeave(); return netOpen(newCode(), true); }
+  renderLobby();
+  if (NET.init) render();
+}
+function renderLobby() {
+  $('peerList').innerHTML = NET.peers.map((p, i) => {
+    const pl = PLAYERS[Math.min(i, 3)];
+    return `<div class="score"><span class="chip">${ringSvg(pl.bs, LIT)}</span><span class="name">${p.name || pl.name}${p.id === NET.id ? ' (나)' : ''}</span>
+            <span class="left">${p.host ? '방장' : ''}${i >= 4 ? ' 관전' : ''}</span></div>`;
+  }).join('');
+  $('lobbyHost').hidden = $('btnLobbyStart').hidden = !NET.host;
+  $('btnLobbyStart').disabled = NET.peers.length < 2;
+}
+function netStart() {                            // 방장: 이번 판을 정해서 모두에게 보낸다 (들어온 순서대로 4명까지 참가)
+  const ps = NET.peers.slice(0, 4); if (ps.length < 2) return;
+  const init = { gid: Math.random().toString(36).slice(2, 8), n: ps.length, size: opt.size, cards: drawCards(opt.goal),
+                 map: opt.map, seed: 1 + Math.floor(Math.random() * 2147483646),     // 맵과, 돌풍 방향을 모두 같게 만드는 씨앗
+                 start: NET.init && NET.init.n === ps.length ? (NET.init.start + 1) % ps.length : Math.floor(Math.random() * ps.length),
+                 seats: ps.map(p => p.id), names: ps.map(p => p.name) };
+  netSend({ t: 'start', init });
+  netBegin(init, []);
+}
+function netBegin(init, log) {                   // 받은 판으로 시작한다. log가 있으면 지금까지의 행동을 한꺼번에 되감는다
+  NET.init = init; NET.seat = init.seats.indexOf(NET.id); NET.log = [];
+  ['lobby', 'result', 'intro', 'setup', 'mode'].forEach(id => $(id).hidden = true);
+  NET.replay = true;
+  newGame(false, init); useMapLook();
+  for (const a of log) { NET.log.push(a); applyAction(a); }
+  NET.replay = false;
+  render();
+  if (!log.length) showIntro();
+}
+function netRecv(m) {
+  if (!NET.on) return;
+  if (m.t === 'hello') {                         // 누가 판을 달라고 한다: 방장이 먼저, 방장이 없으면 다른 사람이 조금 뒤에 보낸다
+    if (NET.init) setTimeout(() => netSend({ t: 'sync', to: m.from, init: NET.init, log: NET.log }), NET.host ? 0 : 300 + Math.random() * 500);
+  } else if (m.t === 'start') netBegin(m.init, []);
+  else if (m.t === 'sync') {
+    if (m.to === NET.id && (!NET.init || NET.init.gid !== m.init.gid || m.log.length > NET.log.length)) netBegin(m.init, m.log);
+  } else if (m.t === 'act') {
+    if (!NET.init || m.gid !== NET.init.gid || m.seq > NET.log.length) return netSend({ t: 'hello' });   // 놓친 수가 있으면 전체를 다시 받는다
+    if (m.seq === NET.log.length) { NET.log.push(m.a); applyAction(m.a); }
+  }
+}
+function netLeave() {
+  if (NET.ch && NET.sb) NET.sb.removeChannel(NET.ch);
+  Object.assign(NET, { on: false, ch: null, init: null, log: [], seat: -1, peers: [], host: false });
+}
+$('btnLocal').onclick = () => { $('mode').hidden = true; $('setup').hidden = false; };
+$('btnCreate').onclick = () => netOpen(newCode(), true);
+$('btnJoin').onclick = () => {
+  const c = $('joinCode').value.replace(/\D/g, '');
+  if (c.length !== 4) { $('modeNote').textContent = '방 번호 4자리를 입력해 주세요.'; return; }
+  $('modeNote').textContent = ''; netOpen(c, false);
+};
+$('btnLobbyStart').onclick = netStart;
+$('btnLobbyLeave').onclick = () => { netLeave(); $('lobby').hidden = true; $('mode').hidden = false; };
+
+// ───────── 첫 화면 ─────────
+const GAME_NAME = '와르르 아트';     // 게임 이름은 여기 한 곳만 바꾸면 된다 (탭 제목·머리말·첫 화면)
+document.title = GAME_NAME;
+$('gameName').textContent = $('titleName').textContent = GAME_NAME;
+// 첫 화면 그림: 받침 위에서 기우뚱거리는 판과, 그 위에 점·선·면으로 만든 형
+$('titleArt').innerHTML = (() => {
+  const dot = (x, y, r, h, w) => `<circle cx="${x}" cy="${y}" r="${r + 5}" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="${x}" cy="${y}" r="${r}" fill="${HUES[h].tones[w]}"/>`;
+  return `<svg viewBox="0 0 400 300">
+    <path d="M200 262l-22 34h44z" fill="#8d877a"/>
+    <path d="M20 250H380" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
+    <polygon points="92,228 200,60 250,228" fill="${mixHues([0, 1, 2])}" fill-opacity=".5"/>
+    <path d="M92 228L200 60L250 228Z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/>
+    ${dot(92, 228, 13, 0, 2)}${dot(200, 60, 19, 1, 3)}${dot(250, 228, 9, 2, 1)}
+    ${dot(322, 222, 12, 4, 2)}${dot(46, 226, 8, 3, 1)}
+  </svg>`;
+})();
+// ───────── 테마 ─────────
+// 새 테마를 더하려면 여기에 한 줄을 더하고, 스타일의 '테마' 구역에 [data-theme="id"] 규칙 묶음을 쓰면 된다.
+// sw: 고르기 창에 보여 줄 색 견본 4칸 (바탕 · 글자 · 고른 것 · 강조)
+const THEMES = [
+  { id: 'a', name: '아틀리에',    desc: '밝은 종이 위에 굵은 먹선, 두툼한 버튼', sw: ['#fff8ea', '#1d1d1f', '#ffd84d', '#ff5a3c'] },
+  { id: 'b', name: '밤의 전시장', desc: '어두운 무대와 산호색 조명',            sw: ['#0c0d10', '#f5f5f7', '#262931', '#ff5b4d'] },
+];
+// 테마는 첫 화면·설정 같은 메뉴 화면의 분위기다. 게임이 시작되면 고른 맵의 모습이 화면을 덮는다(useMapLook).
+let userTheme = 'a', mapLook = false;
+function useMapLook() {                          // 게임 화면: 맵의 색감과 판 바깥 장식
+  mapLook = true;
+  document.documentElement.dataset.theme = S.map.id === 'none' ? userTheme : 'm-' + S.map.id;
+  $('decor').innerHTML = S.map.id === 'none' ? '' : decorSvg(S.map.id);
+}
+function useMenuLook() { mapLook = false; document.documentElement.dataset.theme = userTheme; $('decor').innerHTML = ''; }
+function setTheme(id) {
+  const t = THEMES.find(x => x.id === id) || THEMES[0];
+  userTheme = t.id;
+  if (!mapLook) document.documentElement.dataset.theme = t.id;
+  try { localStorage.setItem('waruru-theme', t.id); } catch (e) {}
+  $('themeList').innerHTML = THEMES.map(x =>
+    `<button class="themecard ${x.id === t.id ? 'on' : ''}" data-t="${x.id}">
+       <span class="sw">${x.sw.map(c => `<i style="background:${c}"></i>`).join('')}</span>
+       <span><b>${x.name}</b><small>${x.desc}</small></span></button>`).join('');
+}
+// 맵 고르기 카드 (설정 화면과 온라인 대기실에 같은 목록을 그린다)
+function renderMaps() {
+  document.querySelectorAll('[data-maps]').forEach(box => box.innerHTML = MAPS.map(m =>
+    `<button class="mapcard ${opt.map === m.id ? 'on' : ''}" data-m="${m.id}"><span class="sw">${m.sw.map(c => `<i style="background:${c}"></i>`).join('')}</span>
+       <b>${m.name}</b><small>${m.rule}<br>${m.art}</small></button>`).join(''));
+}
+document.querySelectorAll('[data-maps]').forEach(box => box.addEventListener('click', e => {
+  const b = e.target.closest('.mapcard'); if (b) { opt.map = b.dataset.m; renderMaps(); }
+}));
+renderMaps();
+$('themeList').addEventListener('click', e => { const b = e.target.closest('.themecard'); if (b) setTheme(b.dataset.t); });
+$('btnThemeTitle').onclick = e => { e.stopPropagation(); $('themes').hidden = false; };   // 첫 화면의 '터치하면 시작'이 함께 눌리지 않게
+$('btnThemesClose').onclick = () => $('themes').hidden = true;
+setTheme(new URLSearchParams(location.search).get('theme') || (() => { try { return localStorage.getItem('waruru-theme'); } catch (e) { return ''; } })());
+
+function enterGame() {
+  $('title').hidden = true; $('mode').hidden = false;
+  const r = new URLSearchParams(location.search).get('room');     // 주소에 ?room=1234 가 붙어 있으면 방 번호를 미리 채운다
+  if (r) $('joinCode').value = r.replace(/\D/g, '').slice(0, 4);
+}
+$('title').addEventListener('click', enterGame);
+$('title').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') enterGame(); });
+
+newGame();
+</script>
+<!-- 컴퓨터 상대의 머리(수 고르기)와 난이도 시험 도구 -->
+<script src="sim.js"></script>
+</body>
+</html>
